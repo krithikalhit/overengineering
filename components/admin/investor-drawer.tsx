@@ -29,33 +29,33 @@ export function InvestorDrawer({
   const [draft, setDraft] = React.useState<Investor | null>(investor);
   React.useEffect(() => setDraft(investor), [investor]);
 
-  if (!investor || !draft) return <Drawer open={false} onClose={onClose}>{null}</Drawer>;
-
-  const inv = investor;
-  const investorIntros = intros.filter((i) => i.investor_id === inv.id);
-
-  // Match meetings by attendee email (and as a fallback, by name in title/attendees).
+  // Hooks must run unconditionally — compute meeting matches even when there's
+  // no active investor, then render nothing below if needed.
   const investorMeetings = React.useMemo(() => {
-    const email = inv.email.trim().toLowerCase();
-    const nameTokens = inv.full_name
-      .toLowerCase()
-      .split(/\s+/)
-      .filter((t) => t.length >= 3);
+    if (!investor) return [];
+    const email = (investor.email ?? "").trim().toLowerCase();
+    const fullName = (investor.full_name ?? "").trim();
+    const nameLower = fullName.toLowerCase();
     return meetings
       .filter((m) => {
-        const haystack = `${m.attendees} ${m.title}`.toLowerCase();
+        const haystack = `${m.attendees ?? ""} ${m.title ?? ""}`.toLowerCase();
         if (email && haystack.includes(email)) return true;
-        if (nameTokens.length >= 1 && haystack.includes(inv.full_name.toLowerCase())) return true;
+        if (fullName.length >= 3 && haystack.includes(nameLower)) return true;
         return false;
       })
       .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
-  }, [meetings, inv.email, inv.full_name]);
+  }, [meetings, investor]);
 
   const noteByEvent = React.useMemo(() => {
     const map = new Map<string, MeetingNote>();
     for (const n of meetingNotes) map.set(n.event_id, n);
     return map;
   }, [meetingNotes]);
+
+  if (!investor || !draft) return <Drawer open={false} onClose={onClose}>{null}</Drawer>;
+
+  const inv = investor;
+  const investorIntros = intros.filter((i) => i.investor_id === inv.id);
 
   function field<K extends keyof Investor>(key: K, value: Investor[K]) {
     setDraft((d) => (d ? { ...d, [key]: value } : d));

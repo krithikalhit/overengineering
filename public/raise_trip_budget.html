@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Raise Trip — Budget Tracker</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#f4f6f9;color:#1a1a1a;min-height:100vh}
+.wrap{max-width:860px;margin:0 auto;padding:28px 20px}
+.top-bar{background:#1B3A6B;border-radius:10px;padding:20px 24px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center}
+.top-bar h1{font-size:17px;font-weight:700;color:#fff;letter-spacing:.03em}
+.top-bar .sub{font-size:11px;color:rgba(255,255,255,.55);margin-top:4px}
+.toggle{display:flex;border:1px solid rgba(255,255,255,.35);border-radius:6px;overflow:hidden}
+.toggle button{padding:6px 18px;font-size:12px;font-weight:600;background:transparent;color:rgba(255,255,255,.6);border:none;cursor:pointer;transition:.15s}
+.toggle button.on{background:#fff;color:#1B3A6B}
+.cards{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}
+.card{background:#fff;border-radius:8px;padding:14px 18px;border:1px solid #e8eaed}
+.card-lbl{font-size:10px;color:#999;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.card-val{font-size:22px;font-weight:700;color:#1a1a1a}
+.card-val.sp{color:#9a6200}
+.card-val.re{color:#1e6e41}
+.cats{background:#fff;border-radius:8px;border:1px solid #e8eaed;padding:22px 22px 6px;margin-bottom:14px}
+.cat{margin-bottom:22px}
+.cat-hdr{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:7px}
+.cat-name{font-size:14px;font-weight:700;color:#1a1a1a}
+.cat-meta{font-size:12px;color:#999}
+.bar-bg{height:6px;background:#f0f1f3;border-radius:3px;overflow:hidden;margin-bottom:13px}
+.bar-fill{height:100%;border-radius:3px;transition:width .8s ease}
+.subcats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:-4px}
+.sc{background:#f8f9fa;border-radius:7px;padding:9px 11px}
+.sc-name{font-size:11px;color:#999;margin-bottom:3px}
+.sc-spent{font-size:13px;font-weight:700;color:#1a1a1a}
+.sc-budget{font-size:11px;color:#bbb}
+.sc.over .sc-spent{color:#c0392b}
+.log{background:#fff;border-radius:8px;border:1px solid #e8eaed;overflow:hidden}
+.log-hdr{padding:13px 20px;display:flex;justify-content:space-between;align-items:center;cursor:pointer;border-bottom:1px solid #f0f1f3}
+.log-hdr-left{font-size:13px;font-weight:600;color:#1a1a1a}
+.log-hdr-right{font-size:12px;color:#aaa}
+table{width:100%;border-collapse:collapse}
+thead tr{background:#f8f9fb}
+th{padding:9px 16px;font-size:10px;font-weight:700;color:#999;text-align:left;text-transform:uppercase;letter-spacing:.05em;border-bottom:1px solid #eee}
+th.num{text-align:right}
+td{padding:9px 16px;font-size:12px;color:#333;border-bottom:1px solid #f5f5f5;vertical-align:middle}
+td.num{text-align:right;font-weight:600;color:#1a1a1a}
+td.dim{color:#bbb;font-size:11px}
+tr:last-child td{border-bottom:none}
+tr:hover td{background:#fafbfd}
+.pill{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:4px}
+.pill-stay{background:#dbeeff;color:#1460a0}
+.pill-travel{background:#edeafe;color:#4a40a0}
+.pill-food{background:#e3f4d5;color:#2d6612}
+.est{font-size:10px;color:#9a6200;background:#fef6e4;padding:1px 5px;border-radius:3px;margin-left:4px}
+.note{font-size:10px;color:#ccc;margin-left:4px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-bar">
+    <div><h1>RAISE TRIP — BUDGET TRACKER</h1><div class="sub">Rates: 1 USD = 94 INR &nbsp;·&nbsp; 1 GBP = 1.27 USD &nbsp;·&nbsp; Updated May 7, 2026</div></div>
+    <div class="toggle"><button class="on" onclick="setCurr('USD')">USD</button><button onclick="setCurr('INR')">INR</button></div>
+  </div>
+  <div class="cards" id="cards"></div>
+  <div class="cats" id="cats"></div>
+  <div class="log">
+    <div class="log-hdr" onclick="toggleLog()"><span class="log-hdr-left">Expense log &nbsp;<span style="font-weight:400;color:#aaa;font-size:12px">13 items</span></span><span class="log-hdr-right" id="tog">&#9650; hide</span></div>
+    <div id="log-body"></div>
+  </div>
+  <div style="text-align:center;font-size:11px;color:#ccc;margin-top:16px">Raise trip · Budget tracker · May 2026</div>
+</div>
+<script>
+const IR=94,GR=1.27;let cur='USD',lo=true;
+const cats=[{name:'Stay',bud:5500,budINR:1359264,col:'#2E75B6',subcats:[{name:'London',bud:1000,key:'London'},{name:'New York',bud:3000,key:'NY Stay'},{name:'LA + Misc',bud:1500,key:'LA+Misc'}]},{name:'Travel',bud:7931,budINR:745514,col:'#7F77DD',subcats:[{name:'Intl Flights',bud:5931,key:'Intl Flights'},{name:'Car Rentals',bud:1000,key:'Car Rentals'},{name:'Domestic Flights',bud:1000,key:'Domestic Flights'}]},{name:'Food',bud:4500,budINR:423000,col:'#639922',subcats:[]}];
+const exps=[{date:'25 Apr',desc:'BLR to LHR Flights',who:'Anurag + Deo',cat:'Travel',sub:'Intl Flights',amt:70723,c:'INR'},{date:'05 May',desc:'LHR to JFK Flights',who:'Anurag + Deo',cat:'Travel',sub:'Intl Flights',amt:1629.06,c:'USD'},{date:'--',desc:'JFK to BLR Flights',who:'Anurag + Deo',cat:'Travel',sub:'Intl Flights',amt:1197.40,c:'USD'},{date:'--',desc:'JFK to BLR Flights',who:'Krith',cat:'Travel',sub:'Intl Flights',amt:50204,c:'INR'},{date:'05 May',desc:'London Accommodation',who:'Anurag + Deo',cat:'Stay',sub:'London',amt:96082.54,c:'INR'},{date:'07 May',desc:'London BnB',who:'Anurag',cat:'Stay',sub:'London',amt:614,c:'USD',est:true},{date:'--',desc:'NYC Airbnb',who:'Anurag + Deo',cat:'Stay',sub:'NY Stay',amt:2031.97,c:'USD'},{date:'06 May',desc:'HG Soho',who:'Anurag + Deo',cat:'Food',sub:'Food',amt:22.38,c:'USD'},{date:'07 May',desc:'VQ Chelsea',who:'Anurag + Deo',cat:'Food',sub:'Food',amt:43.31,c:'USD',note:'34.10 GBP'},{date:'07 May',desc:'Pear Tree Cafe',who:'Anurag + Deo',cat:'Food',sub:'Food',amt:69.25,c:'USD'},{date:'05 May',desc:'Mestizo Chelsea',who:'Anurag + Deo',cat:'Food',sub:'Food',amt:68.01,c:'USD',note:'53.55 GBP'},{date:'05 May',desc:'The Pilot',who:'Anurag + Deo',cat:'Food',sub:'Food',amt:36.70,c:'USD',note:'28.90 GBP'},{date:'05 May',desc:'Point A Hotel Kensington',who:'Anurag + Deo',cat:'Food',sub:'Food',amt:63.50,c:'USD',note:'50 GBP'}];
+function toUSD(a,c){return c==='USD'?a:c==='INR'?a/IR:a*GR;}
+function f(v){if(cur==='INR')return'Rs.'+Math.round(v*IR).toLocaleString('en-IN');return'$'+Math.round(v).toLocaleString();}
+function spC(n){return exps.filter(e=>e.cat===n).reduce((s,e)=>s+toUSD(e.amt,e.c),0);}
+function spS(k){return exps.filter(e=>e.sub===k).reduce((s,e)=>s+toUSD(e.amt,e.c),0);}
+function render(){
+  const tB=cats.reduce((s,c)=>s+c.bud,0),tS=exps.reduce((s,e)=>s+toUSD(e.amt,e.c),0),tR=tB-tS;
+  document.getElementById('cards').innerHTML='<div class="card"><div class="card-lbl">Total budget</div><div class="card-val">'+f(tB)+'</div></div><div class="card"><div class="card-lbl">Spent so far</div><div class="card-val sp">'+f(tS)+'</div></div><div class="card"><div class="card-lbl">Remaining</div><div class="card-val re">'+f(tR)+'</div></div>';
+  let ch='';
+  cats.forEach(function(cat){
+    const sp=spC(cat.name),rem=cat.bud-sp,over=rem<0,pct=Math.min(100,Math.round(sp/cat.bud*100));
+    const bD=cur==='INR'?'Rs.'+Math.round(cat.budINR).toLocaleString('en-IN'):'$'+cat.bud.toLocaleString();
+    ch+='<div class="cat"><div class="cat-hdr"><span class="cat-name">'+cat.name+'</span><span class="cat-meta">'+f(sp)+' of '+bD+' &nbsp;·&nbsp; <span style="color:'+(over?'#c0392b':'#999')+'">'+f(Math.abs(rem))+' '+(over?'over':'left')+'</span></span></div><div class="bar-bg"><div class="bar-fill" style="width:'+pct+'%;background:'+(over?'#e74c3c':cat.col)+'"></div></div>';
+    if(cat.subcats.length){ch+='<div class="subcats">';cat.subcats.forEach(function(sc){const ss=spS(sc.key),sr=sc.bud-ss,sov=sr<0,scB=cur==='INR'?'Rs.'+Math.round(sc.bud*IR).toLocaleString('en-IN'):'$'+sc.bud.toLocaleString();ch+='<div class="sc'+(sov?' over':'')+'"><div class="sc-name">'+sc.name+'</div><div class="sc-spent">'+f(ss)+'</div><div class="sc-budget">of '+scB+'</div></div>';});ch+='</div>';}
+    ch+='</div>';
+  });
+  document.getElementById('cats').innerHTML=ch;
+  const bc={Stay:'pill-stay',Travel:'pill-travel',Food:'pill-food'};
+  let rows='';
+  exps.forEach(function(e){const usd=toUSD(e.amt,e.c);rows+='<tr><td class="dim">'+e.date+'</td><td>'+e.desc+(e.est?'<span class="est">est.</span>':'')+(e.note?'<span class="note">'+e.note+'</span>':'')+'</td><td class="dim">'+e.who+'</td><td><span class="pill '+bc[e.cat]+'">'+e.cat+'</span></td><td class="num">'+f(usd)+'</td></tr>';});
+  document.getElementById('log-body').innerHTML='<table><thead><tr><th>Date</th><th>Description</th><th>Who</th><th>Category</th><th class="num">Amount</th></tr></thead><tbody>'+rows+'</tbody></table>';
+  document.getElementById('log-body').style.display=lo?'block':'none';
+}
+function setCurr(c){cur=c;document.querySelectorAll('.toggle button').forEach(function(b){b.classList.toggle('on',b.textContent===c);});render();}
+function toggleLog(){lo=!lo;document.getElementById('log-body').style.display=lo?'block':'none';document.getElementById('tog').textContent=lo?'▲ hide':'▼ show';}
+render();
+</script>
+</body>
+</html>

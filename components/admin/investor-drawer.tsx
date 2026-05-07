@@ -4,20 +4,27 @@ import { Drawer } from "@/components/ui/drawer";
 import { Input, Textarea, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Investor, IntroRelationship, STAGES } from "@/lib/types";
+import { Investor, IntroRelationship, MeetingNote, STAGES } from "@/lib/types";
+import { Meeting } from "@/lib/calendar";
 
 export function InvestorDrawer({
   investor,
   intros,
+  meetings,
+  meetingNotes,
   onClose,
   onPatch,
   onPatchIntro,
+  onSaveMeetingNote,
 }: {
   investor: Investor | null;
   intros: IntroRelationship[];
+  meetings: Meeting[];
+  meetingNotes: MeetingNote[];
   onClose: () => void;
   onPatch: (id: string, patch: Partial<Investor>) => Promise<void>;
   onPatchIntro: (id: string, patch: Partial<IntroRelationship>) => Promise<void>;
+  onSaveMeetingNote: (note: MeetingNote) => Promise<void>;
 }) {
   const [draft, setDraft] = React.useState<Investor | null>(investor);
   React.useEffect(() => setDraft(investor), [investor]);
@@ -26,6 +33,29 @@ export function InvestorDrawer({
 
   const inv = investor;
   const investorIntros = intros.filter((i) => i.investor_id === inv.id);
+
+  // Match meetings by attendee email (and as a fallback, by name in title/attendees).
+  const investorMeetings = React.useMemo(() => {
+    const email = inv.email.trim().toLowerCase();
+    const nameTokens = inv.full_name
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length >= 3);
+    return meetings
+      .filter((m) => {
+        const haystack = `${m.attendees} ${m.title}`.toLowerCase();
+        if (email && haystack.includes(email)) return true;
+        if (nameTokens.length >= 1 && haystack.includes(inv.full_name.toLowerCase())) return true;
+        return false;
+      })
+      .sort((a, b) => new Date(b.start).getTime() - new Date(a.start).getTime());
+  }, [meetings, inv.email, inv.full_name]);
+
+  const noteByEvent = React.useMemo(() => {
+    const map = new Map<string, MeetingNote>();
+    for (const n of meetingNotes) map.set(n.event_id, n);
+    return map;
+  }, [meetingNotes]);
 
   function field<K extends keyof Investor>(key: K, value: Investor[K]) {
     setDraft((d) => (d ? { ...d, [key]: value } : d));
@@ -158,6 +188,28 @@ export function InvestorDrawer({
           </Row>
         </Section>
 
+        <Section title={`Meetings (${investorMeetings.length})`}>
+          {investorMeetings.length === 0 ? (
+            <div className="text-xs text-ink-500">
+              {inv.email
+                ? "No meetings found for this investor."
+                : "Add an email above to auto-match meetings."}
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {investorMeetings.map((m) => (
+                <MeetingNoteCard
+                  key={m.id}
+                  meeting={m}
+                  investorId={inv.id}
+                  initial={noteByEvent.get(m.id)}
+                  onSave={onSaveMeetingNote}
+                />
+              ))}
+            </div>
+          )}
+        </Section>
+
         <Section title={`Intro paths (${investorIntros.length})`}>
           {investorIntros.length === 0 ? (
             <div className="text-xs text-ink-500">No connectors yet.</div>
@@ -203,6 +255,102 @@ export function InvestorDrawer({
         </Section>
       </div>
     </Drawer>
+  );
+}
+
+function MeetingNoteCard({
+  meeting,
+  investorId,
+  initial,
+  onSave,
+}: {
+  meeting: Meeting;
+  investorId: string;
+  initial: MeetingNote | undefined;
+  onSave: (note: MeetingNote) => Promise<void>;
+}) {
+  const [granola, setGranola] = React.useState(initial?.granola_url ?? "");
+  const [notes, setNotes] = React.useState(initial?.notes ?? "");
+  const [busy, setBusy] = React.useState(false);
+
+  React.useEffect(() => {
+    setGranola(initial?.granola_url ?? "");
+    setNotes(initial?.notes ?? "");
+  }, [initial?.event_id, initial?.granola_url, initial?.notes]);
+
+  const dirty =
+    (initial?.granola_url ?? "") !== granola || (initial?.notes ?? "") !== notes;
+
+  const dt = new Date(meeting.start);
+  const when = isNaN(dt.getTime())
+    ? meeting.start
+    : dt.toLocaleString(undefined, {
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+
+  async function save() {
+    setBusy(true);
+    try {
+      await onSave({
+        id: initial?.id ?? "",
+        event_id: meeting.id,
+        investor_id: investorId,
+        event_title: meeting.title,
+        event_start: meeting.start,
+        granola_url: granola.trim(),
+        notes,
+        updated_at: "",
+      });
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="border rounded p-3">
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="text-sm font-medium truncate">
+            {meeting.notes_url ? (
+              <a
+                href={meeting.notes_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:underline"
+              >
+                {meeting.title}
+              </a>
+            ) : (
+              meeting.title
+            )}
+          </div>
+          <div className="text-[11px] text-ink-500 mt-0.5">
+            {when}
+            {meeting.calendar && <> · {meeting.calendar}</>}
+          </div>
+        </div>
+      </div>
+      <div className="mt-2 space-y-2">
+        <Input
+          placeholder="Granola link (https://granola.so/…)"
+          value={granola}
+          onChange={(e) => setGranola(e.target.value)}
+        />
+        <Textarea
+          placeholder="Notes…"
+          value={notes}
+          onChange={(e) => setNotes(e.target.value)}
+        />
+        <div className="flex justify-end">
+          <Button size="sm" disabled={!dirty || busy} onClick={save}>
+            {busy ? "Saving…" : dirty ? "Save" : "Saved"}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

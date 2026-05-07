@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@notionhq/client": "^2.2.15",
     "clsx": "^2.1.1",
     "google-auth-library": "^9.14.1",
     "googleapis": "^144.0.0",

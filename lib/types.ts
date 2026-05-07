@@ -123,6 +123,52 @@ export const CONNECTOR_HEADERS: (keyof Connector)[] = [
   "created_at",
 ];
 
+export type SuggestedIntro = {
+  id: string;
+  suggester_name: string;
+  suggester_email: string;
+  suggester_company: string;
+  person_name: string;
+  person_company: string;
+  person_email: string;
+  notes: string;
+  created_at: string;
+};
+
+export const SUGGESTED_INTRO_HEADERS: (keyof SuggestedIntro)[] = [
+  "id",
+  "suggester_name",
+  "suggester_email",
+  "suggester_company",
+  "person_name",
+  "person_company",
+  "person_email",
+  "notes",
+  "created_at",
+];
+
+export type MeetingNote = {
+  id: string;
+  event_id: string;
+  investor_id: string;
+  event_title: string;
+  event_start: string; // ISO
+  granola_url: string;
+  notes: string;
+  updated_at: string;
+};
+
+export const MEETING_NOTE_HEADERS: (keyof MeetingNote)[] = [
+  "id",
+  "event_id",
+  "investor_id",
+  "event_title",
+  "event_start",
+  "granola_url",
+  "notes",
+  "updated_at",
+];
+
 export type ActivityEntry = {
   id: string;
   ts: string;

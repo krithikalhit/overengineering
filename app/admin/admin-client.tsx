@@ -1,6 +1,7 @@
 "use client";
 import * as React from "react";
-import { Investor, IntroRelationship, STAGES } from "@/lib/types";
+import { Investor, IntroRelationship, MeetingNote, STAGES } from "@/lib/types";
+import { Meeting } from "@/lib/calendar";
 import { Input, Select } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,8 @@ type View = "table" | "kanban";
 export function AdminClient(props: {
   initialInvestors: Investor[];
   initialIntros: IntroRelationship[];
+  initialMeetingNotes: MeetingNote[];
+  meetings: Meeting[];
 }) {
   return (
     <ToastProvider>
@@ -24,13 +27,18 @@ export function AdminClient(props: {
 function Inner({
   initialInvestors,
   initialIntros,
+  initialMeetingNotes,
+  meetings,
 }: {
   initialInvestors: Investor[];
   initialIntros: IntroRelationship[];
+  initialMeetingNotes: MeetingNote[];
+  meetings: Meeting[];
 }) {
   const toast = useToast();
   const [investors, setInvestors] = React.useState(initialInvestors);
   const [intros, setIntros] = React.useState(initialIntros);
+  const [meetingNotes, setMeetingNotes] = React.useState(initialMeetingNotes);
   const [view, setView] = React.useState<View>("table");
   const [q, setQ] = React.useState("");
   const [stage, setStage] = React.useState<string>("all");
@@ -114,6 +122,27 @@ function Inner({
       body: JSON.stringify(patch),
     });
     if (!res.ok) toast.push("Intro update failed.");
+  }
+
+  async function saveMeetingNote(note: MeetingNote) {
+    const res = await fetch("/api/meeting-notes", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(note),
+    });
+    if (!res.ok) {
+      toast.push("Save failed.");
+      return;
+    }
+    const saved = (await res.json()) as MeetingNote;
+    setMeetingNotes((prev) => {
+      const idx = prev.findIndex((n) => n.event_id === saved.event_id);
+      if (idx < 0) return [...prev, saved];
+      const copy = [...prev];
+      copy[idx] = saved;
+      return copy;
+    });
+    toast.push("Saved.");
   }
 
   async function createInvestor(inv: Partial<Investor>) {
@@ -205,9 +234,12 @@ function Inner({
       <InvestorDrawer
         investor={active}
         intros={intros}
+        meetings={meetings}
+        meetingNotes={meetingNotes}
         onClose={() => setActiveId(null)}
         onPatch={patchInvestor}
         onPatchIntro={patchIntro}
+        onSaveMeetingNote={saveMeetingNote}
       />
       <NewInvestorDialog
         open={newOpen}

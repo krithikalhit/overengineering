@@ -31,10 +31,12 @@ export default async function BoardPage() {
       <TopNav active="board" />
       <main className="mx-auto max-w-6xl px-6 py-10">
         <div className="mb-8">
-          <h1 className="text-2xl font-semibold tracking-tight">Investor intro board</h1>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            riffle seed 26 | investor database
+          </h1>
           <p className="mt-1 text-sm text-ink-500 max-w-2xl">
-            If you can intro us to anyone below, click &ldquo;I can intro&rdquo; — we&rsquo;ll
-            handle the rest. Thanks for the help.
+            If you can intro us to anyone below, click &ldquo;I can intro&rdquo;,
+            thanks for the help
           </p>
         </div>
         {error ? (

@@ -56,11 +56,31 @@ function BoardInner({ investors }: { investors: PublicInvestor[] }) {
   const [pendingId, setPendingId] = React.useState<string | null>(null);
   const [q, setQ] = React.useState("");
   const [category, setCategory] = React.useState<string>("all");
+  const [relevance, setRelevance] = React.useState<string>("all");
 
+  // Read ?relevance= and ?category= from URL on mount; sync changes back to URL.
   React.useEffect(() => {
     setIdentity(loadIdentity());
     setOffered(loadOffered());
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const r = params.get("relevance");
+    const c = params.get("category");
+    if (r) setRelevance(r);
+    if (c) setCategory(c);
   }, []);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (relevance === "all") params.delete("relevance");
+    else params.set("relevance", relevance);
+    if (category === "all") params.delete("category");
+    else params.set("category", category);
+    const qs = params.toString();
+    const next = qs ? `?${qs}` : window.location.pathname;
+    window.history.replaceState(null, "", next);
+  }, [relevance, category]);
 
   const categories = React.useMemo(() => {
     const s = new Set<string>();
@@ -68,17 +88,24 @@ function BoardInner({ investors }: { investors: PublicInvestor[] }) {
     return ["all", ...[...s].sort()];
   }, [investors]);
 
+  const RELEVANCE_OPTIONS = ["all", "High", "Medium", "Low"];
+
   const filtered = React.useMemo(() => {
     const term = q.trim().toLowerCase();
     return investors.filter((i) => {
       if (category !== "all" && i.category !== category) return false;
+      if (
+        relevance !== "all" &&
+        (i.relevance ?? "").toLowerCase() !== relevance.toLowerCase()
+      )
+        return false;
       if (!term) return true;
       return [i.full_name, i.company_project, i.category, i.tags, i.relevance]
         .join(" ")
         .toLowerCase()
         .includes(term);
     });
-  }, [investors, q, category]);
+  }, [investors, q, category, relevance]);
 
   async function offerIntro(investorId: string) {
     if (!identity) {
@@ -104,29 +131,18 @@ function BoardInner({ investors }: { investors: PublicInvestor[] }) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 mb-4">
+      <SuggestSection
+        identity={identity}
+        onNeedIdentity={() => setNeedsIdentity(true)}
+      />
+
+      <div className="flex flex-wrap items-center gap-2 mb-3">
         <Input
           placeholder="Search investors..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
           className="max-w-xs"
         />
-        <div className="flex flex-wrap gap-1">
-          {categories.map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={
-                "px-2 h-7 rounded border text-xs " +
-                (category === c
-                  ? "bg-ink-950 text-white border-ink-950"
-                  : "bg-white text-ink-700 hover:bg-ink-50")
-              }
-            >
-              {c === "all" ? "All" : c}
-            </button>
-          ))}
-        </div>
         <div className="ml-auto text-xs text-ink-500">
           {identity ? (
             <span>
@@ -144,12 +160,28 @@ function BoardInner({ investors }: { investors: PublicInvestor[] }) {
         </div>
       </div>
 
+      <div className="flex flex-wrap items-center gap-3 mb-4">
+        <FilterChips
+          label="Relevance"
+          values={RELEVANCE_OPTIONS}
+          active={relevance}
+          onChange={setRelevance}
+        />
+        <div className="hidden sm:block w-px h-5 bg-ink-200" />
+        <FilterChips
+          label="Category"
+          values={categories}
+          active={category}
+          onChange={setCategory}
+        />
+      </div>
+
       <div className="border rounded overflow-hidden">
         <div className="grid grid-cols-12 border-b bg-ink-50 text-[11px] uppercase tracking-wide text-ink-500 px-4 h-9 items-center">
           <div className="col-span-4">Name</div>
-          <div className="col-span-3">Company / Project</div>
+          <div className="col-span-4">Company / Project</div>
           <div className="col-span-2">Category</div>
-          <div className="col-span-2">Notes</div>
+          <div className="col-span-1">Relevance</div>
           <div className="col-span-1 text-right">&nbsp;</div>
         </div>
         {filtered.length === 0 ? (
@@ -165,14 +197,14 @@ function BoardInner({ investors }: { investors: PublicInvestor[] }) {
                 <div className="col-span-4 text-sm font-medium truncate">
                   {i.full_name}
                 </div>
-                <div className="col-span-3 text-sm text-ink-700 truncate">
+                <div className="col-span-4 text-sm text-ink-700 truncate">
                   {i.company_project}
                 </div>
                 <div className="col-span-2">
                   {i.category && <Badge>{i.category}</Badge>}
                 </div>
-                <div className="col-span-2 text-xs text-ink-500 truncate">
-                  {i.relevance}
+                <div className="col-span-1">
+                  {i.relevance && <Badge>{i.relevance}</Badge>}
                 </div>
                 <div className="col-span-1 flex justify-end">
                   <Button
@@ -209,6 +241,137 @@ function BoardInner({ investors }: { investors: PublicInvestor[] }) {
         }}
       />
     </>
+  );
+}
+
+function SuggestSection({
+  identity,
+  onNeedIdentity,
+}: {
+  identity: Identity | null;
+  onNeedIdentity: () => void;
+}) {
+  const toast = useToast();
+  const [open, setOpen] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [company, setCompany] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  function reset() {
+    setName("");
+    setCompany("");
+    setEmail("");
+  }
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim()) return;
+    if (!identity) {
+      onNeedIdentity();
+      return;
+    }
+    setBusy(true);
+    const res = await fetch("/api/suggestions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        suggester: identity,
+        person: {
+          name: name.trim(),
+          company: company.trim() || undefined,
+          email: email.trim() || undefined,
+        },
+      }),
+    });
+    setBusy(false);
+    if (!res.ok) {
+      toast.push("Could not save. Try again.");
+      return;
+    }
+    toast.push("Thanks — got it.");
+    reset();
+    setOpen(false);
+  }
+
+  return (
+    <div className="mb-8 border rounded">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-4 h-12 hover:bg-ink-50"
+      >
+        <div className="text-sm font-medium text-left">
+          Is there someone you think we should meet?
+        </div>
+        <span className="text-xs text-ink-500">{open ? "Close" : "Add"}</span>
+      </button>
+      {open && (
+        <form onSubmit={submit} className="border-t p-4 space-y-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Input
+              placeholder="Name *"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              autoFocus
+            />
+            <Input
+              placeholder="Company (optional)"
+              value={company}
+              onChange={(e) => setCompany(e.target.value)}
+            />
+          </div>
+          <Input
+            placeholder="Email (optional)"
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+          <div className="flex justify-end gap-2 pt-1">
+            <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={busy || !name.trim()}>
+              {busy ? "Sending…" : "Submit"}
+            </Button>
+          </div>
+        </form>
+      )}
+    </div>
+  );
+}
+
+function FilterChips({
+  label,
+  values,
+  active,
+  onChange,
+}: {
+  label: string;
+  values: string[];
+  active: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <span className="text-[11px] uppercase tracking-wide text-ink-500">{label}</span>
+      <div className="flex flex-wrap gap-1">
+        {values.map((v) => (
+          <button
+            key={v}
+            onClick={() => onChange(v)}
+            className={
+              "px-2 h-7 rounded border text-xs " +
+              (active === v
+                ? "bg-ink-950 text-white border-ink-950"
+                : "bg-white text-ink-700 hover:bg-ink-50")
+            }
+          >
+            {v === "all" ? "All" : v}
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

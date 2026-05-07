@@ -17,8 +17,10 @@ export function TopNav({
   return (
     <header className="border-b">
       <div className="mx-auto max-w-6xl px-6 h-12 flex items-center justify-between">
-        <Link href="/board" className="text-sm font-semibold tracking-tight">
-          overengineering
+        <Link href="/board" className="flex items-center gap-2">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/logo.svg" alt="Riffle" className="h-5 w-auto" />
+          <span className="text-sm font-semibold tracking-tight">riffle</span>
         </Link>
         <nav className="flex items-center gap-1">
           {items.map((it) => (

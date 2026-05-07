@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isAuthed } from "@/lib/auth";
-import { listMeetings } from "@/lib/notion";
+import { listMeetings } from "@/lib/calendar";
 
 export async function GET() {
   if (!(await isAuthed())) return NextResponse.json({ error: "unauth" }, { status: 401 });

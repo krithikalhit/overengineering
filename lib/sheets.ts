@@ -9,12 +9,18 @@ import {
   INVESTOR_HEADERS,
   IntroRelationship,
   Investor,
+  MEETING_NOTE_HEADERS,
+  MeetingNote,
+  SUGGESTED_INTRO_HEADERS,
+  SuggestedIntro,
 } from "./types";
 
 const SHEET_INVESTORS = "investors";
 const SHEET_CONNECTORS = "connectors";
 const SHEET_INTROS = "intro_relationships";
 const SHEET_ACTIVITY = "activity_log";
+const SHEET_MEETING_NOTES = "meeting_notes";
+const SHEET_SUGGESTIONS = "suggested_intros";
 
 let cached: sheets_v4.Sheets | null = null;
 
@@ -96,7 +102,14 @@ export async function bootstrap(): Promise<void> {
   const existing = new Set(
     (meta.data.sheets ?? []).map((s) => s.properties?.title).filter(Boolean) as string[],
   );
-  const wanted = [SHEET_INVESTORS, SHEET_CONNECTORS, SHEET_INTROS, SHEET_ACTIVITY];
+  const wanted = [
+    SHEET_INVESTORS,
+    SHEET_CONNECTORS,
+    SHEET_INTROS,
+    SHEET_ACTIVITY,
+    SHEET_MEETING_NOTES,
+    SHEET_SUGGESTIONS,
+  ];
   const missing = wanted.filter((w) => !existing.has(w));
   if (missing.length > 0) {
     await client().spreadsheets.batchUpdate({
@@ -110,6 +123,8 @@ export async function bootstrap(): Promise<void> {
   await ensureHeaders(SHEET_CONNECTORS, CONNECTOR_HEADERS as readonly string[]);
   await ensureHeaders(SHEET_INTROS, INTRO_HEADERS as readonly string[]);
   await ensureHeaders(SHEET_ACTIVITY, ACTIVITY_HEADERS as readonly string[]);
+  await ensureHeaders(SHEET_MEETING_NOTES, MEETING_NOTE_HEADERS as readonly string[]);
+  await ensureHeaders(SHEET_SUGGESTIONS, SUGGESTED_INTRO_HEADERS as readonly string[]);
 }
 
 // ---------- Investors ----------
@@ -201,6 +216,50 @@ export async function upsertConnector(c: Connector): Promise<Connector> {
     requestBody: { values: objectsToRows([c], CONNECTOR_HEADERS) },
   });
   return c;
+}
+
+// ---------- Suggested intros ----------
+
+export async function appendSuggestion(s: SuggestedIntro): Promise<void> {
+  await client().spreadsheets.values.append({
+    spreadsheetId: spreadsheetId(),
+    range: `${SHEET_SUGGESTIONS}!A1`,
+    valueInputOption: "RAW",
+    insertDataOption: "INSERT_ROWS",
+    requestBody: { values: objectsToRows([s], SUGGESTED_INTRO_HEADERS) },
+  });
+}
+
+// ---------- Meeting notes ----------
+
+export async function listMeetingNotes(): Promise<MeetingNote[]> {
+  const values = await readSheet(`${SHEET_MEETING_NOTES}!A1:Z`);
+  return rowsToObjects<MeetingNote>(values, MEETING_NOTE_HEADERS);
+}
+
+export async function upsertMeetingNote(note: MeetingNote): Promise<MeetingNote> {
+  const all = await listMeetingNotes();
+  const idx = all.findIndex((n) => n.event_id === note.event_id);
+  const updated: MeetingNote = { ...note, updated_at: new Date().toISOString() };
+  if (idx < 0) {
+    await client().spreadsheets.values.append({
+      spreadsheetId: spreadsheetId(),
+      range: `${SHEET_MEETING_NOTES}!A1`,
+      valueInputOption: "RAW",
+      insertDataOption: "INSERT_ROWS",
+      requestBody: { values: objectsToRows([updated], MEETING_NOTE_HEADERS) },
+    });
+    return updated;
+  }
+  const merged: MeetingNote = { ...all[idx], ...updated, id: all[idx].id };
+  const rowNumber = idx + 2;
+  await client().spreadsheets.values.update({
+    spreadsheetId: spreadsheetId(),
+    range: `${SHEET_MEETING_NOTES}!A${rowNumber}`,
+    valueInputOption: "RAW",
+    requestBody: { values: objectsToRows([merged], MEETING_NOTE_HEADERS) },
+  });
+  return merged;
 }
 
 // ---------- Activity ----------

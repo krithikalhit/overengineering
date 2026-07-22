@@ -1,17 +1,20 @@
 "use client";
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import type { RunwaySummary } from "@/lib/runway/sheets";
+import { PixelHeart, PixelText } from "./pixel";
 
-// Each "Add" input maps to a sheet category (see the Part B spec):
+// Each "Add" input maps to a sheet category:
 // hire → people, marketing initiative → marketing, investor → capital_inflow,
-// one-off → user-picked oneTimeExpense (default other_capex),
-// recurring → user-picked recurringExpense.
+// one-off → user-picked oneTimeExpense, recurring → user-picked recurringExpense.
 type AddType = "hire" | "marketing" | "investor" | "oneoff" | "recurring";
 
-const ADD_TYPES: { id: AddType; label: string; fixedCategory?: string; pickFrom?: "oneTimeExpense" | "recurringExpense" }[] = [
+const ADD_TYPES: {
+  id: AddType;
+  label: string;
+  fixedCategory?: string;
+  pickFrom?: "oneTimeExpense" | "recurringExpense";
+}[] = [
   { id: "hire", label: "Full-time hire", fixedCategory: "people" },
   { id: "marketing", label: "Marketing initiative", fixedCategory: "marketing" },
   { id: "investor", label: "New angel / investor", fixedCategory: "capital_inflow" },
@@ -19,8 +22,12 @@ const ADD_TYPES: { id: AddType; label: string; fixedCategory?: string; pickFrom?
   { id: "recurring", label: "Recurring expense", pickFrom: "recurringExpense" },
 ];
 
-const selectCls =
-  "h-8 w-full rounded border bg-white px-2 text-sm text-ink-950 focus:outline-none focus:ring-1 focus:ring-ink-950";
+const BAR_MAX = 24;
+
+type Dialog =
+  | { kind: "ok"; text: string }
+  | { kind: "error"; text: string }
+  | null;
 
 export function RunwayClient({ summary }: { summary: RunwaySummary }) {
   const router = useRouter();
@@ -31,6 +38,7 @@ export function RunwayClient({ summary }: { summary: RunwaySummary }) {
   const [month, setMonth] = React.useState(summary.currentMonthYm ?? "");
   const [busy, setBusy] = React.useState(false);
   const [msg, setMsg] = React.useState<{ ok: boolean; text: string } | null>(null);
+  const [dialog, setDialog] = React.useState<Dialog>(null);
 
   const addType = ADD_TYPES.find((t) => t.id === type)!;
   const categoryKey = addType.fixedCategory ?? category;
@@ -41,6 +49,21 @@ export function RunwayClient({ summary }: { summary: RunwaySummary }) {
   const futureMonths = summary.currentMonthYm
     ? summary.months.slice(summary.months.findIndex((m) => m.ym === summary.currentMonthYm))
     : [];
+  const recurring = cat?.kind === "recurringExpense";
+
+  // Health bar: parse a number of months out of the sheet's formatted runway cell.
+  const runwayMonths = parseFloat((summary.runway ?? "").replace(/[^\d.]/g, ""));
+  const fill = Number.isFinite(runwayMonths)
+    ? Math.max(0, Math.min(BAR_MAX, Math.round(runwayMonths)))
+    : 0;
+
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setDialog(null);
+    };
+    addEventListener("keydown", onKey);
+    return () => removeEventListener("keydown", onKey);
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -54,13 +77,15 @@ export function RunwayClient({ summary }: { summary: RunwaySummary }) {
     const data = await res.json().catch(() => ({}));
     setBusy(false);
     if (!res.ok) {
-      setMsg({ ok: false, text: data.error ?? `Failed (HTTP ${res.status})` });
+      setMsg({ ok: false, text: "Verify failed — see error" });
+      setDialog({ kind: "error", text: data.error ?? `Write failed (HTTP ${res.status}).` });
       return;
     }
-    const warn = data.warnings?.length ? ` (${data.warnings.join(" ")})` : "";
-    setMsg({
-      ok: true,
-      text: `Added "${label}" to ${data.category} — ${data.monthsWritten.length} month(s) written and verified.${warn}`,
+    const warn = data.warnings?.length ? ` ${data.warnings.join(" ")}` : "";
+    setMsg({ ok: true, text: `Wrote "${label}" → ${data.category}` });
+    setDialog({
+      kind: "ok",
+      text: `Write verified. "${label}" → ${data.category}, row ${data.row}. ${data.amountPerMonth} × ${data.monthsWritten.length} month${data.monthsWritten.length > 1 ? "s" : ""} (${data.monthsWritten[0]}${data.monthsWritten.length > 1 ? ` → ${data.monthsWritten[data.monthsWritten.length - 1]}` : ""}).${warn}`,
     });
     setLabel("");
     setAmount("");
@@ -68,158 +93,214 @@ export function RunwayClient({ summary }: { summary: RunwaySummary }) {
   }
 
   return (
-    <div className="space-y-8">
-      {/* Headline stats */}
-      <section className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <Stat label="Runway" value={summary.runway ?? "—"} />
-        <Stat label="Average burn" value={summary.averageBurn ?? "—"} />
-        <Stat label="Out of cash" value={summary.outOfCash ?? "—"} />
-        <Stat label="Total burn" value={summary.totalBurn ?? "—"} />
-      </section>
-
-      {/* Liquidity */}
-      <section>
-        <h2 className="text-xs font-medium uppercase tracking-wide text-ink-600 mb-2">Liquidity</h2>
-        <div className="border rounded divide-y">
-          {summary.liquidity.map((l) => (
-            <div key={l.label} className="flex items-center justify-between px-3 h-9 text-sm">
-              <span>{l.label}</span>
-              <span className="tabular-nums">{l.value}</span>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* Add */}
-      <section>
-        <h2 className="text-xs font-medium uppercase tracking-wide text-ink-600 mb-2">
-          Add to plan{summary.currentMonth ? ` · from ${summary.currentMonth}` : ""}
-        </h2>
-        {summary.currentMonthYm === null ? (
-          <div className="border rounded p-4 text-sm text-ink-700">
-            The current month was not found in the sheet&apos;s month headers, so writes are
-            disabled. Fix the month headers in the sheet first.
-          </div>
-        ) : (
-          <form onSubmit={submit} className="border rounded p-4 space-y-3">
-            <div className="grid sm:grid-cols-2 gap-3">
-              <label className="block space-y-1">
-                <span className="text-xs text-ink-600">Type</span>
-                <select className={selectCls} value={type} onChange={(e) => setType(e.target.value as AddType)}>
-                  {ADD_TYPES.map((t) => (
-                    <option key={t.id} value={t.id}>{t.label}</option>
-                  ))}
-                </select>
-              </label>
-              {addType.pickFrom ? (
-                <label className="block space-y-1">
-                  <span className="text-xs text-ink-600">Category</span>
-                  <select className={selectCls} value={category} onChange={(e) => setCategory(e.target.value)}>
-                    {pickable.map((c) => (
-                      <option key={c.key} value={c.key}>{c.label}</option>
+    <div className="rw-wrap">
+      <div className="rw-cols">
+        {/* ===== left ===== */}
+        <div>
+          <div className="rw-win">
+            <div className="rw-titlebar"><span>STATUS.EXE</span><span className="rw-x" aria-hidden="true">✕</span></div>
+            <div className="rw-body">
+              <div className="rw-stats">
+                <div className="rw-stat">
+                  <div className="k">Runway</div>
+                  <div className="v">{summary.runway ?? "—"}</div>
+                  <div className="d">months of cash</div>
+                </div>
+                <div className="rw-stat">
+                  <div className="k">Avg burn</div>
+                  <div className="v blue">{summary.averageBurn ?? "—"}</div>
+                  <div className="d">per month</div>
+                </div>
+                <div className="rw-stat">
+                  <div className="k">Total burn</div>
+                  <div className="v">{summary.totalBurn ?? "—"}</div>
+                  <div className="d">all time</div>
+                </div>
+                <div className="rw-stat gameover">
+                  <div className="k">Game over at</div>
+                  <div className="v">{summary.outOfCash ?? "—"}</div>
+                  <div className="d">out of cash · current plan</div>
+                </div>
+              </div>
+              <div className="rw-health">
+                <div className="rw-health-row">
+                  <PixelHeart scale={3} />
+                  <div className="rw-bar" role="img" aria-label={`Runway health: ${fill} of ${BAR_MAX} months`}>
+                    {Array.from({ length: BAR_MAX }, (_, i) => (
+                      <i key={i} className={i < fill ? (i === fill - 1 ? "tip" : "fill") : ""} />
                     ))}
-                  </select>
-                </label>
-              ) : (
-                <div className="block space-y-1">
-                  <span className="text-xs text-ink-600">Category</span>
-                  <div className="h-8 flex items-center px-2 text-sm border rounded bg-ink-50">
-                    {cat?.label ?? categoryKey}
                   </div>
                 </div>
-              )}
-              <label className="block space-y-1">
-                <span className="text-xs text-ink-600">Label (column A)</span>
-                <Input value={label} onChange={(e) => setLabel(e.target.value)} placeholder='e.g. "Senior engineer" or "Jane Doe (angel)"' required />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-xs text-ink-600">
-                  {cat?.kind === "recurringExpense" ? "Amount per month" : "Amount"}
-                </span>
-                <Input value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="any" placeholder="0" required />
-              </label>
-              <label className="block space-y-1">
-                <span className="text-xs text-ink-600">
-                  {cat?.kind === "recurringExpense" ? "Starting month" : "Month"}
-                </span>
-                <select className={selectCls} value={month} onChange={(e) => setMonth(e.target.value)}>
-                  {futureMonths.map((m) => (
-                    <option key={m.ym} value={m.ym}>{m.label}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-            {cat && !cat.writable && (
-              <p className="text-xs text-ink-700">
-                This category can&apos;t be written right now: {cat.issues.join(" ")}
-              </p>
-            )}
-            <p className="text-xs text-ink-500">
-              {cat?.kind === "recurringExpense"
-                ? "Fills every month from the starting month through the last column, inside the category's SUM."
-                : "Writes a single month, inside the category's SUM."}{" "}
-              The total is verified after the write; if it doesn&apos;t move by exactly this amount, the row is rolled back.
-            </p>
-            <div className="flex items-center gap-3">
-              <Button type="submit" disabled={busy || (cat ? !cat.writable : false)}>
-                {busy ? "Writing…" : "Add to sheet"}
-              </Button>
-              {msg && (
-                <span className={"text-xs " + (msg.ok ? "text-ink-700" : "text-ink-950 font-medium")}>
-                  {msg.text}
-                </span>
-              )}
-            </div>
-          </form>
-        )}
-      </section>
-
-      {/* Categories */}
-      <section>
-        <h2 className="text-xs font-medium uppercase tracking-wide text-ink-600 mb-2">
-          Categories · {summary.tab}
-        </h2>
-        <div className="border rounded divide-y">
-          {summary.categories.map((c) => (
-            <div key={c.key} className="px-3 py-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span>
-                  {c.label}
-                  <span className="ml-2 text-xs text-ink-500">
-                    {c.kind === "inflow" ? "inflow" : c.kind === "recurringExpense" ? "recurring" : "one-time"}
-                  </span>
-                </span>
-                <span className="tabular-nums">{c.total}</span>
+                <div className="cap">
+                  {Number.isFinite(runwayMonths) ? `${fill}/${BAR_MAX} months` : "runway unreadable"} · current month {summary.currentMonth ?? "—"}
+                </div>
               </div>
-              {c.issues.length > 0 && (
-                <p className="text-xs text-ink-500 mt-1">{c.issues.join(" ")}</p>
+            </div>
+          </div>
+
+          <div className="rw-win">
+            <div className="rw-titlebar"><span>LIQUIDITY.DAT</span><span className="rw-x" aria-hidden="true">✕</span></div>
+            <div className="rw-body">
+              <div className="rw-lst">
+                {summary.liquidity.map((l) => (
+                  <div className="rw-lrow" key={l.label}>
+                    <span className="nm">{l.label}</span>
+                    <span>{l.value}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="rw-win">
+            <div className="rw-titlebar"><span>CATEGORIES.DAT</span><span className="rw-x" aria-hidden="true">✕</span></div>
+            <div className="rw-body">
+              <div className="rw-lst">
+                {summary.categories.map((c) => (
+                  <div className="rw-lrow" key={c.key} style={{ display: "block" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+                      <span className="nm">
+                        {c.label}
+                        <span className={"rw-tag" + (c.kind === "inflow" ? " blue" : "")}>
+                          {c.kind === "inflow" ? "inflow" : c.kind === "recurringExpense" ? "recur" : "1-time"}
+                        </span>
+                      </span>
+                      <span>{c.total}</span>
+                    </div>
+                    {c.issues.length > 0 && <div className="rw-issue">{c.issues.join(" ")}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ===== right ===== */}
+        <div>
+          <div className="rw-win">
+            <div className="rw-titlebar"><span>ADD_ITEM.EXE</span><span className="rw-x" aria-hidden="true">✕</span></div>
+            <div className="rw-body">
+              {summary.currentMonthYm === null ? (
+                <p className="rw-note">
+                  Current month not found in the sheet&apos;s month headers — writes are disabled.
+                  Fix the month headers in the sheet first.
+                </p>
+              ) : (
+                <form onSubmit={submit}>
+                  <div className="rw-grid2">
+                    <div className="rw-field">
+                      <label htmlFor="rw-type">Type</label>
+                      <select id="rw-type" value={type} onChange={(e) => setType(e.target.value as AddType)}>
+                        {ADD_TYPES.map((t) => (
+                          <option key={t.id} value={t.id}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="rw-field">
+                      <label htmlFor="rw-cat">Category</label>
+                      {addType.pickFrom ? (
+                        <select id="rw-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
+                          {pickable.map((c) => (
+                            <option key={c.key} value={c.key}>{c.label}</option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="fixed">{cat?.label ?? categoryKey}</div>
+                      )}
+                    </div>
+                    <div className="rw-field">
+                      <label htmlFor="rw-label">Label (column A)</label>
+                      <input id="rw-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="SENIOR ENGINEER" required />
+                    </div>
+                    <div className="rw-field">
+                      <label htmlFor="rw-amount">{recurring ? "Amount / month (INR)" : "Amount (INR)"}</label>
+                      <input id="rw-amount" value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="any" placeholder="0" required />
+                    </div>
+                    <div className="rw-field">
+                      <label htmlFor="rw-month">{recurring ? "Starting month" : "Month"}</label>
+                      <select id="rw-month" value={month} onChange={(e) => setMonth(e.target.value)}>
+                        {futureMonths.map((m) => (
+                          <option key={m.ym} value={m.ym}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  {cat && !cat.writable && (
+                    <p className="rw-note">Locked: {cat.issues.join(" ")}</p>
+                  )}
+                  <p className="rw-note">
+                    {recurring
+                      ? "Fills start month → last column, inside the category's SUM."
+                      : "Writes one month, inside the category's SUM."}{" "}
+                    Verified after the write; mismatch = rollback.
+                  </p>
+                  <div className="rw-actions">
+                    <button className="rw-go" type="submit" disabled={busy || (cat ? !cat.writable : false)}>
+                      {busy ? "Writing…" : "▶ Write to sheet"}
+                    </button>
+                    {msg && <span className={"rw-msg" + (msg.ok ? "" : " err")}>{msg.text}</span>}
+                  </div>
+                </form>
               )}
             </div>
-          ))}
-        </div>
-      </section>
+          </div>
 
-      {summary.issues.length > 0 && (
-        <section className="border rounded p-3">
-          <h2 className="text-xs font-medium uppercase tracking-wide text-ink-600 mb-1">
-            Map validation notes
-          </h2>
-          <ul className="text-xs text-ink-600 list-disc pl-4 space-y-0.5">
-            {summary.issues.map((i, n) => (
-              <li key={n}>{i}</li>
-            ))}
-          </ul>
-        </section>
+          <div className="rw-win rw-console">
+            <div className="rw-titlebar"><span>WRITE.LOG</span><span className="rw-x" aria-hidden="true">✕</span></div>
+            <div className="rw-body">
+              <div className="ln">Guarded write: insert inside the SUM → write → verify totals → rollback on mismatch.</div>
+              <div className="ln">Columns left of {summary.currentMonth ?? "the current month"} are actuals — never written.</div>
+              <div className="ln">Tab: {summary.tab} <span className="st">LIVE</span></div>
+            </div>
+          </div>
+
+          {summary.issues.length > 0 && (
+            <div className="rw-win">
+              <div className="rw-titlebar"><span>NOTES.TXT</span><span className="rw-x" aria-hidden="true">✕</span></div>
+              <div className="rw-body">
+                {summary.issues.map((i, n) => (
+                  <p className="rw-note" key={n} style={{ margin: "0 0 6px" }}>{i}</p>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {dialog && (
+        <div className="rw-overlay" role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) setDialog(null); }}>
+          <div className={"rw-dialog" + (dialog.kind === "error" ? " error" : "")}>
+            <div className="rw-titlebar">
+              <span>{dialog.kind === "error" ? "ERROR" : "WRITE OK"}</span>
+              <button className="rw-x" type="button" onClick={() => setDialog(null)} aria-label="Close dialog">✕</button>
+            </div>
+            <div className="rw-dlg-body">
+              <div className="rw-dlg-icon">{dialog.kind === "error" ? "✕" : "✓"}</div>
+              <div className="rw-dlg-text">{dialog.text}</div>
+            </div>
+            <div className="rw-dlg-actions">
+              <button className="rw-dlg-btn" type="button" onClick={() => setDialog(null)} autoFocus>OK</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+export function RunwayMast({ right, tab }: { right?: React.ReactNode; tab?: string }) {
   return (
-    <div className="border rounded p-3">
-      <div className="text-xs text-ink-600">{label}</div>
-      <div className="text-lg font-semibold tracking-tight tabular-nums mt-1">{value}</div>
-    </div>
+    <>
+      <div className="rw-mast">
+        <div>
+          <PixelText text="RUNWAY.EXE" scale={6} color="#ffffff" />
+          <div className="rw-sub" style={{ marginTop: 10 }}>
+            burn tracker <b>LIVE</b>{tab ? <> · {tab}</> : null}
+          </div>
+        </div>
+        {right}
+      </div>
+      <div className="rw-wrap"><div className="rw-dither" /></div>
+    </>
   );
 }

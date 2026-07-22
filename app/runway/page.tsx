@@ -1,8 +1,8 @@
 import { auth, signIn, signOut } from "@/lib/runway/auth";
 import { oauthConfigured, userSheetsClient } from "@/lib/runway/session";
 import { getRunwaySummary, RunwayError, RunwaySummary } from "@/lib/runway/sheets";
-import { Button } from "@/components/ui/button";
-import { RunwayClient } from "./runway-client";
+import { RunwayClient, RunwayMast } from "./runway-client";
+import "./runway.css";
 
 export const dynamic = "force-dynamic";
 
@@ -16,26 +16,28 @@ export default async function RunwayPage() {
 
   if (needsSignIn) {
     return (
-      <main className="min-h-screen flex items-center justify-center px-6">
-        <div className="w-full max-w-sm border rounded p-6 space-y-4">
-          <div>
-            <h1 className="text-lg font-semibold tracking-tight">Runway</h1>
-            <p className="text-sm text-ink-600 mt-1">
-              {session?.error === "RefreshTokenError"
-                ? "Your Google session expired (test-mode tokens last 7 days). Sign in again."
-                : "Sign in with a Google account that can open the master financial sheet."}
-            </p>
+      <main className="rwx">
+        <div className="rw-center">
+          <div className="rw-win" style={{ maxWidth: 420, width: "100%", margin: 0 }}>
+            <div className="rw-titlebar"><span>LOGIN.EXE</span><span className="rw-x" aria-hidden="true">✕</span></div>
+            <div className="rw-body">
+              <p className="rw-note" style={{ marginTop: 0 }}>
+                {session?.error === "RefreshTokenError"
+                  ? "Google session expired (test-mode tokens last 7 days). Sign in again."
+                  : "Sign in with a Google account that can open the master financial sheet."}
+              </p>
+              <form
+                action={async () => {
+                  "use server";
+                  await signIn("google", { redirectTo: "/runway" });
+                }}
+              >
+                <button type="submit" className="rw-go" style={{ width: "100%" }}>
+                  ▶ Sign in with Google
+                </button>
+              </form>
+            </div>
           </div>
-          <form
-            action={async () => {
-              "use server";
-              await signIn("google", { redirectTo: "/runway" });
-            }}
-          >
-            <Button type="submit" className="w-full">
-              Sign in with Google
-            </Button>
-          </form>
         </div>
       </main>
     );
@@ -62,43 +64,35 @@ export default async function RunwayPage() {
     }
   }
 
+  const mastRight = oauthMode ? (
+    <form
+      action={async () => {
+        "use server";
+        await signOut({ redirectTo: "/runway" });
+      }}
+    >
+      <button type="submit" className="rw-ghost">✕ {session?.user?.email ?? "Sign out"}</button>
+    </form>
+  ) : (
+    <span className="rw-ghost" style={{ cursor: "default" }}>SERVICE ACCOUNT</span>
+  );
+
   return (
-    <main className="min-h-screen">
-      <header className="border-b">
-        <div className="mx-auto max-w-4xl px-6 h-12 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.svg" alt="Riffle" className="h-5 w-auto" />
-            <span className="text-sm font-semibold tracking-tight">runway</span>
-          </div>
-          {oauthMode ? (
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-ink-600">{session?.user?.email}</span>
-              <form
-                action={async () => {
-                  "use server";
-                  await signOut({ redirectTo: "/runway" });
-                }}
-              >
-                <Button type="submit" variant="ghost" size="sm">
-                  Sign out
-                </Button>
-              </form>
+    <main className="rwx">
+      <RunwayMast right={mastRight} tab={summary?.tab} />
+      {loadError ? (
+        <div className="rw-wrap" style={{ paddingTop: 26 }}>
+          <div className="rw-win" style={{ maxWidth: 560 }}>
+            <div className="rw-titlebar"><span>ERROR</span><span className="rw-x" aria-hidden="true">✕</span></div>
+            <div className="rw-dlg-body">
+              <div className="rw-dlg-icon" style={{ background: "var(--rw-blue)" }}>✕</div>
+              <div className="rw-dlg-text">{loadError}</div>
             </div>
-          ) : (
-            <span className="text-xs text-ink-500 border rounded px-2 py-0.5">
-              service account
-            </span>
-          )}
+          </div>
         </div>
-      </header>
-      <div className="mx-auto max-w-4xl px-6 py-8">
-        {loadError ? (
-          <div className="border rounded p-4 text-sm text-ink-700">{loadError}</div>
-        ) : (
-          <RunwayClient summary={summary!} />
-        )}
-      </div>
+      ) : (
+        <RunwayClient summary={summary!} />
+      )}
     </main>
   );
 }

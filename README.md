@@ -82,6 +82,38 @@ Lightweight, on purpose: a single shared password (`ADMIN_PASSWORD`) signs an HT
 
 ---
 
+## 4½. Runway (master financial sheet)
+
+`/runway` is a burn/runway dashboard over the master financial Google Sheet, with "Add"
+forms that write new line items (hires, marketing spend, investor checks, one-offs)
+directly into the sheet's category groups.
+
+Unlike the CRM sheet (service account), Runway uses **Google OAuth**: every read/write
+runs with the signed-in user's own token, so sheet permissions are the access control.
+Set up the OAuth client in Google Cloud (Google Auth platform → Clients, redirect URI
+`<origin>/api/auth/callback/google`, scope `https://www.googleapis.com/auth/spreadsheets`),
+then fill `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`,
+and `SPREADSHEET_ID` in `.env.local`. If the OAuth app is in Testing mode, refresh tokens
+expire after 7 days — the page will just ask you to sign in again.
+
+How it stays safe:
+
+- `lib/runway/sheetMap.ts` is only a *hint*. On every use the app re-reads the live sheet:
+  finds each category label in column A, parses the real detail range out of the header
+  row's `=SUM(...)` formula, and repairs the map (`lib/runway/sheets.ts`).
+- Adding a line item inserts a row **at** the category's last detail row so the SUM
+  auto-expands, writes label + amount(s), then re-reads the category total and Total Burn
+  and confirms they moved by exactly the amount written. Any mismatch → the inserted row
+  is deleted and the error surfaced.
+- Fixed-range SUMs that don't auto-expand are rewritten to include the new row; anything
+  more exotic than a plain `=SUM(range)` aborts (and rolls back) instead of guessing.
+- Columns left of the current month are actuals and are never written.
+- Recurring costs fill start month → last column; inflows and one-offs write one month.
+
+If auto-detection can't find the main tab, pin it with `RUNWAY_SHEET_TAB`.
+
+---
+
 ## 5. Deployment (Vercel)
 
 ```bash

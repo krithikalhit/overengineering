@@ -88,13 +88,19 @@ Lightweight, on purpose: a single shared password (`ADMIN_PASSWORD`) signs an HT
 forms that write new line items (hires, marketing spend, investor checks, one-offs)
 directly into the sheet's category groups.
 
-Unlike the CRM sheet (service account), Runway uses **Google OAuth**: every read/write
-runs with the signed-in user's own token, so sheet permissions are the access control.
-Set up the OAuth client in Google Cloud (Google Auth platform → Clients, redirect URI
-`<origin>/api/auth/callback/google`, scope `https://www.googleapis.com/auth/spreadsheets`),
-then fill `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`,
-and `SPREADSHEET_ID` in `.env.local`. If the OAuth app is in Testing mode, refresh tokens
-expire after 7 days — the page will just ask you to sign in again.
+Two access modes, picked automatically from the env:
+
+- **Google OAuth** (preferred): set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
+  `NEXTAUTH_SECRET`, and `SPREADSHEET_ID`. Every read/write runs with the signed-in
+  user's own token, so sheet permissions are the access control. OAuth client setup:
+  Google Auth platform → Clients, redirect URI `<origin>/api/auth/callback/google`,
+  scope `https://www.googleapis.com/auth/spreadsheets`. In Testing mode refresh tokens
+  expire after 7 days — the page will just ask you to sign in again.
+- **Service account** (no OAuth setup needed): leave the OAuth vars unset. Runway then
+  uses the CRM's service account — share the master sheet with
+  `GOOGLE_SERVICE_ACCOUNT_EMAIL` as Editor and set `SPREADSHEET_ID`. Since the service
+  account can always edit the sheet, `/runway` is gated behind the admin password
+  (same cookie as `/admin`).
 
 How it stays safe:
 

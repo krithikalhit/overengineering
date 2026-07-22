@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, AUTH_COOKIE_NAME } from "./lib/auth";
 
 export const config = {
-  matcher: ["/admin/:path*", "/meetings/:path*"],
+  matcher: ["/admin/:path*", "/meetings/:path*", "/runway/:path*"],
 };
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
   if (pathname.startsWith("/admin/login")) return NextResponse.next();
+  // In OAuth mode /runway is gated by Google sign-in instead of the admin cookie.
+  if (
+    pathname.startsWith("/runway") &&
+    process.env.GOOGLE_CLIENT_ID &&
+    process.env.GOOGLE_CLIENT_SECRET
+  ) {
+    return NextResponse.next();
+  }
   const token = req.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (await verifyToken(token)) return NextResponse.next();
   const url = req.nextUrl.clone();

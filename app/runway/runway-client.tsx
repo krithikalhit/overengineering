@@ -51,11 +51,11 @@ export function RunwayClient({ summary }: { summary: RunwaySummary }) {
     : [];
   const recurring = cat?.kind === "recurringExpense";
 
-  // Health bar: parse a number of months out of the sheet's formatted runway cell.
-  const runwayMonths = parseFloat((summary.runway ?? "").replace(/[^\d.]/g, ""));
+  const runwayMonths = summary.runwayMonths ?? NaN;
   const fill = Number.isFinite(runwayMonths)
     ? Math.max(0, Math.min(BAR_MAX, Math.round(runwayMonths)))
     : 0;
+  const cur = summary.currency;
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -82,10 +82,14 @@ export function RunwayClient({ summary }: { summary: RunwaySummary }) {
       return;
     }
     const warn = data.warnings?.length ? ` ${data.warnings.join(" ")}` : "";
+    const wrote =
+      data.fxRate
+        ? `$${Number(data.amountPerMonth).toLocaleString("en-US")} (₹${Number(data.amountWrittenPerMonth).toLocaleString("en-IN")} written at ₹${data.fxRate}/$)`
+        : `₹${Number(data.amountWrittenPerMonth ?? data.amountPerMonth).toLocaleString("en-IN")}`;
     setMsg({ ok: true, text: `Wrote "${label}" → ${data.category}` });
     setDialog({
       kind: "ok",
-      text: `Write verified. "${label}" → ${data.category}, row ${data.row}. ${data.amountPerMonth} × ${data.monthsWritten.length} month${data.monthsWritten.length > 1 ? "s" : ""} (${data.monthsWritten[0]}${data.monthsWritten.length > 1 ? ` → ${data.monthsWritten[data.monthsWritten.length - 1]}` : ""}).${warn}`,
+      text: `Write verified. "${label}" → ${data.category}, row ${data.row}. ${wrote} × ${data.monthsWritten.length} month${data.monthsWritten.length > 1 ? "s" : ""} (${data.monthsWritten[0]}${data.monthsWritten.length > 1 ? ` → ${data.monthsWritten[data.monthsWritten.length - 1]}` : ""}).${warn}`,
     });
     setLabel("");
     setAmount("");
@@ -213,7 +217,7 @@ export function RunwayClient({ summary }: { summary: RunwaySummary }) {
                       <input id="rw-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="SENIOR ENGINEER" required />
                     </div>
                     <div className="rw-field">
-                      <label htmlFor="rw-amount">{recurring ? "Amount / month (INR)" : "Amount (INR)"}</label>
+                      <label htmlFor="rw-amount">{recurring ? `Amount / month (${cur})` : `Amount (${cur})`}</label>
                       <input id="rw-amount" value={amount} onChange={(e) => setAmount(e.target.value)} type="number" step="any" placeholder="0" required />
                     </div>
                     <div className="rw-field">

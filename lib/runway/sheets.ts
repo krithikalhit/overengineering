@@ -353,11 +353,20 @@ export async function validateSheetMap(
 
 // ---------- summary (dashboard read) ----------
 
+/** INR-per-USD rate for display + write conversion (RUNWAY_FX_RATE). */
+export function fxRate(): number | null {
+  const r = Number(process.env.RUNWAY_FX_RATE);
+  return Number.isFinite(r) && r > 0 ? r : null;
+}
+
 export interface RunwaySummary {
   tab: string;
   months: { label: string; ym: string }[]; // ym = "YYYY-MM"
   currentMonth: string | null;
   currentMonthYm: string | null;
+  runwayMonths: number | null;
+  currency: "USD" | "INR";
+  fxRate: number | null;
   liquidity: { label: string; value: string }[];
   averageBurn: string | null;
   runway: string | null;
@@ -393,30 +402,62 @@ export async function getRunwaySummary(sheets: sheets_v4.Sheets): Promise<Runway
   add("totalBurn", map.totalBurnRow ? `${t}!${map.totalsCol}${map.totalBurnRow}` : null);
   map.categories.forEach((c) => add(`cat:${c.key}`, `${t}!${map.totalsCol}${c.headerRow}`));
 
-  const values = await batchGet(sheets, ranges, "FORMATTED_VALUE");
-  const val = (key: string): string | null =>
-    key in idx ? ((values[idx[key]]?.[0]?.[0] ?? "") as string).toString() || null : null;
+  const values = await batchGet(sheets, ranges, "UNFORMATTED_VALUE");
+  const num = (key: string): number | null => {
+    if (!(key in idx)) return null;
+    const raw = values[idx[key]]?.[0]?.[0];
+    if (raw === undefined || raw === null || raw === "") return null;
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  };
 
+  // The sheet's model is INR; the founders think in USD. With RUNWAY_FX_RATE set
+  // (the sheet's own mirror rate, e.g. 94), monetary values are shown converted.
+  const rate = fxRate();
+  const money = (n: number | null): string | null => {
+    if (n === null) return null;
+    if (rate) return (n < 0 ? "-$" : "$") + Math.round(Math.abs(n) / rate).toLocaleString("en-US");
+    return (n < 0 ? "-₹" : "₹") + Math.round(Math.abs(n)).toLocaleString("en-IN");
+  };
+
+  const runwayMonths = num("runway");
   const ym = (m: MonthCol) => `${m.year}-${String(m.month).padStart(2, "0")}`;
+  const curIdx = map.currentMonthIndex;
+  // "Out of cash" label is missing on this sheet — derive it: current month + runway.
+  let outOfCash: string | null = null;
+  if (curIdx !== null && runwayMonths !== null && runwayMonths >= 0) {
+    const oocIdx = curIdx + Math.floor(runwayMonths);
+    outOfCash =
+      oocIdx < map.monthCols.length
+        ? map.monthCols[oocIdx].label
+        : `after ${map.monthCols[map.monthCols.length - 1].label}`;
+  }
+
+  const issues = [...map.issues];
+  if (rate) issues.push(`Displaying USD at ₹${rate}/$ (the sheet's mirror rate); the INR tab stays the source of truth.`);
+
   return {
     tab: map.tab,
     months: map.monthCols.map((m) => ({ label: m.label, ym: ym(m) })),
-    currentMonth: map.currentMonthIndex !== null ? map.monthCols[map.currentMonthIndex].label : null,
-    currentMonthYm: map.currentMonthIndex !== null ? ym(map.monthCols[map.currentMonthIndex]) : null,
-    liquidity: map.liquidityRows.map((l) => ({ label: l.label, value: val(`liq:${l.label}`) ?? "—" })),
-    averageBurn: val("averageBurn"),
-    runway: val("runway"),
-    outOfCash: val("outOfCash"),
-    totalBurn: val("totalBurn"),
+    currentMonth: curIdx !== null ? map.monthCols[curIdx].label : null,
+    currentMonthYm: curIdx !== null ? ym(map.monthCols[curIdx]) : null,
+    liquidity: map.liquidityRows.map((l) => ({ label: l.label, value: money(num(`liq:${l.label}`)) ?? "—" })),
+    averageBurn: money(num("averageBurn")),
+    runway: runwayMonths !== null ? `${runwayMonths.toFixed(1)} mo` : null,
+    runwayMonths,
+    outOfCash,
+    totalBurn: money(num("totalBurn")),
+    currency: rate ? "USD" : "INR",
+    fxRate: rate,
     categories: map.categories.map((c) => ({
       key: c.key,
       label: c.label,
       kind: c.kind,
-      total: val(`cat:${c.key}`) ?? "—",
+      total: money(num(`cat:${c.key}`)) ?? "—",
       writable: c.writable,
       issues: c.issues,
     })),
-    issues: map.issues,
+    issues,
   };
 }
 
@@ -434,7 +475,12 @@ export interface AddLineItemResult {
   row: number;
   category: string;
   monthsWritten: string[];
+  /** In the display currency (USD when RUNWAY_FX_RATE is set). */
   amountPerMonth: number;
+  /** The value actually written to the sheet (INR when converting). */
+  amountWrittenPerMonth: number;
+  currency: "USD" | "INR";
+  fxRate: number | null;
   verified: true;
   warnings: string[];
 }
@@ -466,6 +512,10 @@ export async function addLineItem(
   if (!Number.isFinite(input.amount) || input.amount === 0) {
     throw new RunwayError("Amount must be a non-zero number");
   }
+  // Input is in the display currency (USD when RUNWAY_FX_RATE is set); the
+  // sheet's model is INR, so convert before writing.
+  const rate = fxRate();
+  const writeAmount = rate ? Math.round(input.amount * rate) : input.amount;
 
   // Resolve target month columns. Writes never go left of the current month (actuals).
   let startIdx = map.currentMonthIndex;
@@ -595,7 +645,7 @@ export async function addLineItem(
           { range: `${t}!${map.nameCol}${insertRow}`, values: [[label]] },
           {
             range: `${t}!${firstCol}${insertRow}:${lastCol}${insertRow}`,
-            values: [targets.map(() => input.amount)],
+            values: [targets.map(() => writeAmount)],
           },
         ],
       },
@@ -611,9 +661,9 @@ export async function addLineItem(
     const mismatches: string[] = [];
     targets.forEach((mc, i) => {
       const catDelta = numAt(post[0], i) - numAt(pre[0], i);
-      if (Math.abs(catDelta - input.amount) > EPS) {
+      if (Math.abs(catDelta - writeAmount) > EPS) {
         mismatches.push(
-          `${mc.label}: "${cat.label}" total moved by ${catDelta}, expected ${input.amount}`,
+          `${mc.label}: "${cat.label}" total moved by ${catDelta}, expected ${writeAmount}`,
         );
       }
       if (burnRowAfter !== null) {
@@ -622,9 +672,9 @@ export async function addLineItem(
           if (Math.abs(burnDelta) > EPS) {
             mismatches.push(`${mc.label}: Total Burn moved by ${burnDelta} on an inflow (expected 0)`);
           }
-        } else if (Math.abs(Math.abs(burnDelta) - Math.abs(input.amount)) > EPS) {
+        } else if (Math.abs(Math.abs(burnDelta) - Math.abs(writeAmount)) > EPS) {
           mismatches.push(
-            `${mc.label}: Total Burn moved by ${burnDelta}, expected ±${input.amount}`,
+            `${mc.label}: Total Burn moved by ${burnDelta}, expected ±${writeAmount}`,
           );
         }
       }
@@ -641,6 +691,9 @@ export async function addLineItem(
       category: cat.label,
       monthsWritten: targets.map((m) => m.label),
       amountPerMonth: input.amount,
+      amountWrittenPerMonth: writeAmount,
+      currency: rate ? "USD" : "INR",
+      fxRate: rate,
       verified: true,
       warnings,
     };

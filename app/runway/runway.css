@@ -81,6 +81,13 @@
 .rw-bar i { height: 16px; flex: 1; background: var(--rw-white); }
 .rw-bar i.fill { background: var(--rw-black); }
 .rw-bar i.tip { background: var(--rw-blue); }
+/* simulator: segments this scenario burns away / adds */
+.rw-bar i.lost {
+  background: repeating-linear-gradient(45deg, var(--rw-blue) 0 3px, var(--rw-white) 3px 6px);
+}
+.rw-bar i.gain { background: var(--rw-blue); }
+.rw-delta { font-weight: 700; color: var(--rw-black); }
+.rw-delta.bad { background: var(--rw-blue); color: var(--rw-white); padding: 0 4px; }
 .rw-health .cap { margin-top: 6px; font-size: 10px; text-transform: uppercase; opacity: 0.65; }
 
 .rw-lst { border: 2px solid var(--rw-black); }

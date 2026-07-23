@@ -367,6 +367,9 @@ export interface RunwaySummary {
   runwayMonths: number | null;
   currency: "USD" | "INR";
   fxRate: number | null;
+  /** Numeric values in the display currency — used by the client-side simulator. */
+  liquidityTotalNum: number | null;
+  averageBurnNum: number | null;
   liquidity: { label: string; value: string }[];
   averageBurn: string | null;
   runway: string | null;
@@ -421,6 +424,12 @@ export async function getRunwaySummary(sheets: sheets_v4.Sheets): Promise<Runway
   };
 
   const runwayMonths = num("runway");
+  const conv = (n: number | null): number | null => (n === null ? null : rate ? n / rate : n);
+  const liqNums = map.liquidityRows
+    .map((l) => num(`liq:${l.label}`))
+    .filter((n): n is number => n !== null);
+  const liquidityTotalNum = liqNums.length > 0 ? conv(liqNums.reduce((a, b) => a + b, 0)) : null;
+  const averageBurnNum = conv(num("averageBurn"));
   const ym = (m: MonthCol) => `${m.year}-${String(m.month).padStart(2, "0")}`;
   const curIdx = map.currentMonthIndex;
   // "Out of cash" label is missing on this sheet — derive it: current month + runway.
@@ -449,6 +458,8 @@ export async function getRunwaySummary(sheets: sheets_v4.Sheets): Promise<Runway
     totalBurn: money(num("totalBurn")),
     currency: rate ? "USD" : "INR",
     fxRate: rate,
+    liquidityTotalNum,
+    averageBurnNum,
     categories: map.categories.map((c) => ({
       key: c.key,
       label: c.label,

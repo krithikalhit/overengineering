@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, AUTH_COOKIE_NAME } from "./lib/auth";
 
 export const config = {
-  matcher: ["/admin/:path*", "/meetings/:path*", "/runway/:path*"],
+  matcher: ["/admin/:path*", "/meetings/:path*", "/runway/:path*", "/budget", "/budget.html"],
 };
 
 export async function middleware(req: NextRequest) {

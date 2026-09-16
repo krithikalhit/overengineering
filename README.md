@@ -120,6 +120,17 @@ If auto-detection can't find the main tab, pin it with `RUNWAY_SHEET_TAB`.
 
 ---
 
+## 4¾. Budget sandbox (`/budget`)
+
+`public/budget.html` is a self-contained what-if sandbox over the Aug 26 payments planner:
+every spend line is a toggle, and flipping one recomputes burn, sweep, runway and the
+out-of-cash date instantly. No build, no dependencies — it also works opened straight from
+disk. Served at `/budget` and gated by the admin password (it lists salaries by name).
+State lives in the browser's localStorage. Maintenance rules and the numbers that must
+keep holding are in `CLAUDE.md`.
+
+---
+
 ## 5. Deployment (Vercel)
 
 ```bash

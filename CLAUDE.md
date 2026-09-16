@@ -13,9 +13,12 @@ It is served as a static file at `/budget` (rewrite in `next.config.ts`) and gat
 admin cookie in `middleware.ts` because the seed data carries named salaries. Keep both
 `/budget` and `/budget.html` in the matcher.
 
-State persists to localStorage under `riffle-budget-sandbox-v2`. If
-`window.claude.use("db")` exists it syncs across viewers; if not it falls back to local.
-Don't remove the fallback.
+State persists to localStorage under `riffle-budget-sandbox-v2`, and then to the first
+shared store that answers: (1) `/api/budget/state` when the page is served from this app
+(same admin cookie; the JSON lives in a `budget_state` tab of the CRM sheet, split into
+40k-char cells; the page polls every 15s), else (2) `window.claude.use("db")` inside a
+claude.ai artifact, else (3) local only. Don't remove the fallbacks. Backup / Restore in
+the Lines panel move the whole state as a JSON file between origins.
 
 ### How it works
 

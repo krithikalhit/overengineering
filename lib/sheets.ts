@@ -40,11 +40,13 @@ function client(): sheets_v4.Sheets {
   return cached;
 }
 
-function spreadsheetId(): string {
+export function spreadsheetId(): string {
   const id = process.env.GOOGLE_SHEET_ID;
   if (!id) throw new Error("Missing GOOGLE_SHEET_ID");
   return id;
 }
+
+export const sheetsClient = client;
 
 async function readSheet(range: string): Promise<string[][]> {
   const res = await client().spreadsheets.values.get({

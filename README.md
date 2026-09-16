@@ -126,8 +126,10 @@ If auto-detection can't find the main tab, pin it with `RUNWAY_SHEET_TAB`.
 every spend line is a toggle, and flipping one recomputes burn, sweep, runway and the
 out-of-cash date instantly. No build, no dependencies — it also works opened straight from
 disk. Served at `/budget` and gated by the admin password (it lists salaries by name).
-State lives in the browser's localStorage. Maintenance rules and the numbers that must
-keep holding are in `CLAUDE.md`.
+Scenarios are shared: the page saves to `/api/budget/state`, which keeps the JSON in a
+`budget_state` tab of the CRM sheet, so everyone who signs in sees the same views (others'
+changes show up within ~15s). Opened from disk it falls back to localStorage. Maintenance
+rules and the numbers that must keep holding are in `CLAUDE.md`.
 
 ---
 

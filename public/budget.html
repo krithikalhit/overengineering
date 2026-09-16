@@ -288,6 +288,9 @@ footer.fin{margin-top:26px;padding-top:16px;border-top:1px solid var(--line);col
             <label class="btn" for="impCsv" style="cursor:pointer">Import CSV</label>
             <input type="file" id="impCsv" accept=".csv,text/csv" hidden>
             <button class="btn ghost" id="dlTemplate">Template</button>
+            <button class="btn ghost" id="bkState" title="Download every scenario as a JSON file">Backup</button>
+            <label class="btn ghost" for="rsState" style="cursor:pointer" title="Load a backup — replaces all scenarios">Restore</label>
+            <input type="file" id="rsState" accept=".json,application/json" hidden>
             <button class="btn ghost" id="reset" style="margin-left:auto;color:var(--crit)">Reset scenario</button>
           </div>
           <p class="tiny muted" style="margin:10px 0 0">CSV columns: <span class="num">name, category, entity, currency, gross, gst, tds, other, shape, start, status</span>. Importing replaces the lines in this scenario only.</p>
@@ -436,7 +439,8 @@ function persist(){
   try{ localStorage.setItem(LS,JSON.stringify(S)); }catch(e){}
   if(!dbDoc||applyingRemote) return;
   clearTimeout(saveT);
-  saveT=setTimeout(()=>{ myRev=Date.now(); dbDoc.set({state:S,rev:myRev}).catch(()=>{}); },450);
+  saveT=setTimeout(()=>{ myRev=Date.now();
+    dbDoc.set({state:S,rev:myRev}).then(()=>setSync("shared",1)).catch(()=>setSync("not saved",0)); },450);
 }
 function adopt(st){
   if(!st||!Array.isArray(st.scenarios)||!st.scenarios.length) return false;
@@ -448,22 +452,53 @@ function adopt(st){
   applyingRemote=false; return true;
 }
 (function(){ try{ const r=localStorage.getItem(LS); if(r) adopt(JSON.parse(r)); }catch(e){} })();
+function setSync(txt,on,title){
+  const b=document.getElementById("syncBadge"); if(!b) return;
+  b.dataset.on=on?"1":""; document.getElementById("syncTxt").textContent=txt; if(title) b.title=title;
+}
+/* Shared store #1: when served from the Riffle app, /api/budget/state keeps one copy
+   for everyone who signs in (backed by a tab in the CRM Google Sheet). Same doc-shaped
+   interface as the claude db so the sync code below doesn't care which it got. */
+async function restStore(){
+  if(!/^https?:$/.test(location.protocol)) return null;
+  const URL_="/api/budget/state", opts={credentials:"same-origin",cache:"no-store"};
+  let first; try{ const r=await fetch(URL_,opts); if(!r.ok) return null; first=await r.json(); }catch(e){ return null }
+  let lastRev=first.rev||0;
+  return {
+    async get(){ return {data:{state:first.state,rev:first.rev}} },
+    async set(d){
+      const r=await fetch(URL_,Object.assign({method:"PUT",headers:{"content-type":"application/json"},body:JSON.stringify(d)},opts));
+      if(!r.ok) throw new Error("save failed "+r.status);
+      lastRev=d.rev;
+    },
+    onSnapshot(cb){
+      setInterval(async()=>{
+        if(document.hidden) return;
+        try{ const r=await fetch(URL_,opts); if(!r.ok) return; const j=await r.json();
+          if(j.rev&&j.rev!==lastRev){ lastRev=j.rev; cb({data:{state:j.state,rev:j.rev}}); } }catch(e){}
+      },15000);
+    }
+  };
+}
 (async function sync(){
-  let db=null;
-  try{ db = window.claude && claude.use ? await claude.use("db") : null; }catch(e){ db=null; }
-  if(!db) return;
+  let doc=await restStore(), title="Saved for everyone who signs in — changes appear for others within ~15s.";
+  if(!doc){
+    /* Shared store #2: the claude.ai artifact db. */
+    let db=null;
+    try{ db = window.claude && claude.use ? await claude.use("db") : null; }catch(e){ db=null; }
+    if(!db) return;
+    doc=db.doc("sandbox/state"); title="Changes sync to everyone with this link.";
+  }
   try{
-    dbDoc=db.doc("sandbox/state");
+    dbDoc=doc;
     const snap=await dbDoc.get();
     if(snap && snap.data && snap.data.state && adopt(snap.data.state)) render();
-    else { myRev=Date.now(); dbDoc.set({state:S,rev:myRev}).catch(()=>{}); }
+    else { myRev=Date.now(); dbDoc.set({state:S,rev:myRev}).catch(()=>setSync("not saved",0)); }
     dbDoc.onSnapshot(s=>{
       if(!s||!s.data||!s.data.state||s.data.rev===myRev) return;
       if(adopt(s.data.state)) render();
     });
-    const b=document.getElementById("syncBadge");
-    b.dataset.on="1"; document.getElementById("syncTxt").textContent="shared";
-    b.title="Changes sync to everyone with this link.";
+    setSync("shared",1,title);
   }catch(e){ dbDoc=null; }
 })();
 
@@ -913,9 +948,23 @@ async function offerFile(filename,data){
     const d=window.claude&&claude.use?await claude.use("downloads"):null;
     if(d){ await d.save({filename,data}); return }
   }catch(e){}
-  try{ await navigator.clipboard.writeText(data); alert("Downloads aren't available here — the CSV is on your clipboard instead.") }
+  try{
+    const a=document.createElement("a"), url=URL.createObjectURL(new Blob([data],{type:"text/plain"}));
+    a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),2000); return;
+  }catch(e){}
+  try{ await navigator.clipboard.writeText(data); alert("Downloads aren't available here — the file is on your clipboard instead.") }
   catch(e){ alert("Couldn't save the file in this view.") }
 }
+document.getElementById("bkState").onclick=()=>offerFile("riffle-budget-sandbox-"+new Date().toISOString().slice(0,10)+".json",JSON.stringify(S,null,1));
+document.getElementById("rsState").addEventListener("change",async e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  let st=null; try{ st=JSON.parse(await f.text()); }catch(err){}
+  e.target.value="";
+  if(!st||!Array.isArray(st.scenarios)){ alert("That file isn't a sandbox backup."); return }
+  if(!confirm("Replace all "+S.scenarios.length+" scenario(s) here with the "+st.scenarios.length+" in this backup?")) return;
+  if(adopt(st)){ persist(); render(); }
+});
 document.getElementById("expCsv").onclick=()=>{
   const sc=act(), p=project(sc,Number(S.horizon)||36);
   const head=["month","india_inr","us_usd","revenue_usd","net_burn_usd","sweep_usd","india_cash_inr","total_cash_usd"];

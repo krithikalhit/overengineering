@@ -41,12 +41,12 @@ month). One-offs from Apr–Aug are seeded switched off and tagged `past`.
 
 Verified against the file on 2026-09-16 by evaluating the model section in node.
 
-- India monthly cash out = ₹24,67,300
-- US monthly cash out = $16,576
-- Net recurring monthly burn = $42,277
-- At $3.1M cash, zero at month 72 = Sep 2032
-- Month 0 US spend = $43,576 (16,576 recurring + 27,000 one-time consultants)
-- Steady-state sweep = $25,701
+- India monthly cash out = ₹25,04,859 (₹24,67,300 planner lines + ₹37,559 subscriptions/fees)
+- US monthly cash out = $20,530 ($16,576 planner lines + $3,954 subscriptions/fees)
+- Net recurring monthly burn = $46,622
+- At $3.1M cash, zero at month 65 = Feb 2032
+- Month 0 US spend = $47,530 (20,530 recurring + 27,000 one-time consultants)
+- Steady-state sweep = $26,092
 - A $100k US hire at 1.25x loaded = $10,416.67/mo
 
 ### Leave alone
@@ -58,9 +58,15 @@ Verified against the file on 2026-09-16 by evaluating the model section in node.
   names.
 - The loaded-cost multiplier on hires (1.25 US / 1.15 India). A $100k engineer is not
   $8,333/mo once you count payroll tax, benefits, laptop and seats.
-- Lines tagged `add` sit at zero on purpose — placeholders to fill in, not real spend. The
-  planner only ever recorded Zoho Books under Dues & Subscriptions, which can't be the
-  whole picture.
+- Lines tagged `add` sit at zero on purpose — placeholders to fill in, not real spend
+  (ad spend, laptops, research, licensing).
+- Dues & Subscriptions come from the FY 26–27 Payments Summary sheets, not the planner
+  (the planner only ever recorded Zoho Books). US lines are Mercury CC + Mercury bank;
+  India lines are IDFC card, HSBC charges and Razorpay fees. Rule for the seeded amount:
+  Aug 26 charge if there was one; recurring-but-not-in-Aug = Apr–Aug run-rate; known
+  annual (Carta, Google Workspace on Mercury, domains) = /12. Anthropic and Cursor are
+  usage-based and swung $1.2k–2.7k and $111–288 across Apr–Aug — the Aug figure is seeded,
+  the range is in the note.
 
 ### Known data caveats
 

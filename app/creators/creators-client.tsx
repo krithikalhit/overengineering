@@ -381,10 +381,20 @@ function Feed({ initial, posthogReady }: { initial: CreatorVideo[]; posthogReady
 
   return (
     <main className="min-h-screen bg-white pb-24">
-      {/* Link bar */}
+      {/* Header + link bar */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur">
         <div className="mx-auto max-w-[1400px] px-4 sm:px-6 pt-4 pb-3">
           <form onSubmit={submitLink} className="flex items-center gap-3">
+            <a href="/creators" className="shrink-0 flex items-center gap-2.5" title="Riffle creator program">
+              <span className="h-10 w-10 rounded-full bg-ink-950 grid place-items-center">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/logo.svg" alt="" className="h-5 w-auto invert" />
+              </span>
+              <span className="hidden sm:block leading-tight">
+                <span className="block text-[15px] font-semibold tracking-tight">Creators</span>
+                <span className="block text-[11px] text-ink-500">Riffle creator program</span>
+              </span>
+            </a>
             <div className="relative flex-1">
               <Link2 className="absolute left-5 top-1/2 -translate-y-1/2 h-5 w-5 text-ink-500" />
               <input

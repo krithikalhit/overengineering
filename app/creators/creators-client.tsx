@@ -239,6 +239,27 @@ function Feed({ initial, posthogReady }: { initial: CreatorVideo[]; posthogReady
     });
   }
 
+  /** Setting the handle on a blank card also fills profile link, utm_campaign and the tracked link. */
+  function handlePatch(v: CreatorVideo, rawHandle: string): Partial<CreatorVideo> {
+    const handle = rawHandle.trim().replace(/^@/, "").replace(/\/.*$/, "");
+    if (!handle) return {};
+    const prior = videosRef.current.filter((x) => x.id !== v.id && x.creator_handle.toLowerCase() === handle.toLowerCase());
+    const campaign = v.utm_campaign || slugify(handle);
+    const content = v.utm_content || `video-${prior.length + 1}`;
+    const p: Partial<CreatorVideo> = {
+      creator_handle: handle,
+      creator_url: v.creator_url || profileUrlFor(v.platform, handle),
+      utm_campaign: campaign,
+      utm_content: content,
+      utm_source: v.utm_source || v.platform,
+    };
+    if (!v.tracked_url) p.tracked_url = buildTrackedUrl(PROGRAM.defaultLandingUrl, { source: p.utm_source!, campaign, content });
+    if (!v.owner && prior[0]?.owner) p.owner = prior[0].owner;
+    if (!v.price_usd && prior[0]?.price_usd) p.price_usd = prior[0].price_usd;
+    if (!v.followers && prior[0]?.followers) p.followers = prior[0].followers;
+    return p;
+  }
+
   const patch = React.useCallback(
     async (id: string, p: Partial<CreatorVideo>) => {
       const cur = videosRef.current.find((x) => x.id === id);
@@ -500,6 +521,7 @@ function Feed({ initial, posthogReady }: { initial: CreatorVideo[]; posthogReady
                   if (p.owner !== undefined) writeLastOwner(p.owner);
                   return patch(v.id, p);
                 }}
+                onHandle={(h) => patch(v.id, handlePatch(v, h))}
                 onCopy={async () => {
                   if (!v.tracked_url) return toast.push("No tracked link on this video yet");
                   await navigator.clipboard.writeText(v.tracked_url);
@@ -593,6 +615,7 @@ function VideoCard({
   statsReady,
   onEdit,
   onPatch,
+  onHandle,
   onCopy,
 }: {
   v: CreatorVideo;
@@ -600,6 +623,7 @@ function VideoCard({
   statsReady: boolean;
   onEdit: () => void;
   onPatch: (p: Partial<CreatorVideo>) => Promise<CreatorVideo | null>;
+  onHandle: (handle: string) => Promise<CreatorVideo | null>;
   onCopy: () => void;
 }) {
   const vertical = v.orientation !== "landscape";
@@ -656,14 +680,20 @@ function VideoCard({
       <div className="px-1 pt-2.5">
         {v.title ? (
           <p className="text-[13px] font-semibold leading-snug line-clamp-2 text-ink-950">{v.title}</p>
+        ) : !v.creator_handle ? (
+          <p className="text-[12px] text-amber-700 leading-snug">
+            {platformLabel(v.platform)} won&apos;t share reel details. Type the creator&apos;s handle and the tracked link is ready.
+          </p>
         ) : incomplete ? (
           <button onClick={onEdit} className="text-[13px] font-semibold text-amber-700 hover:underline text-left">
-            Add details →
+            Add a thumbnail →
           </button>
         ) : null}
         <div className={cn("flex items-center gap-2", (v.title || incomplete) && "mt-1.5")}>
           <span className="h-6 w-6 shrink-0 rounded-full bg-ink-200 text-ink-700 grid place-items-center text-[11px] font-semibold">{initial}</span>
-          {v.creator_url ? (
+          {!v.creator_handle ? (
+            <InlineHandle onSave={onHandle} />
+          ) : v.creator_url ? (
             <a href={v.creator_url} target="_blank" rel="noreferrer" className="text-[13px] text-ink-700 hover:underline truncate">
               @{v.creator_handle || v.creator_name || "creator"}
             </a>
@@ -687,6 +717,32 @@ function VideoCard({
         </div>
       </div>
     </article>
+  );
+}
+
+/** "@handle" input shown on a card the platform wouldn't describe. Enter/blur saves. */
+function InlineHandle({ onSave }: { onSave: (handle: string) => void }) {
+  const [draft, setDraft] = React.useState("");
+  const commit = () => {
+    const h = draft.trim().replace(/^@/, "");
+    if (h) onSave(h);
+  };
+  return (
+    <span className="relative inline-flex items-center flex-1 min-w-0">
+      <span className="absolute left-2 text-[13px] text-ink-400">@</span>
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit();
+        }}
+        placeholder="handle"
+        autoFocus
+        spellCheck={false}
+        className="h-7 w-full rounded-lg border border-amber-300 bg-amber-50/60 pl-6 pr-2 text-[13px] focus:outline-none focus:border-ink-950 focus:bg-white"
+      />
+    </span>
   );
 }
 

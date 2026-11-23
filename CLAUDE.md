@@ -97,9 +97,12 @@ Pinterest-style feed of creator-program videos. One row per posted video in a
   `uniq(person_id)`. Matching is case-insensitive (`statsForVideo` in `lib/creators/types.ts`).
 - `user_signed_up` fires server-side for email signups with no `$host`; never add a host
   filter to the signup query or ~22% of signups vanish (per the event's PostHog description).
-- `lib/creators/resolve.ts` is best-effort scraping: YouTube/TikTok oEmbed, subscriber/
-  follower counts from the public profile HTML, Instagram via the `/embed/captioned/` page
-  (usually a login wall → manual fields). Follower counts are editable by hand; a blank
+- `lib/creators/resolve.ts` is best-effort: YouTube/TikTok oEmbed, subscriber/follower
+  counts from the public profile HTML, Instagram via the `/embed/captioned/` page (usually a
+  login wall → manual fields). Don't try to get past Instagram's login wall with a session
+  cookie or by imitating its web client — tried 2026-11-23, it answers "Page Not Found" and
+  it's against their terms. The sanctioned route is the Graph API (business_discovery +
+  instagram_oembed) with a Meta developer app. Follower counts are editable by hand; a blank
   `followers_checked_at` means hand-entered.
 - Thumbnails: YouTube URLs are kept as-is; anything else is proxied through
   `/api/creators/img` (allowlisted CDN hosts only) and shrunk client-side to a ≤45k-char

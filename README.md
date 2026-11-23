@@ -245,10 +245,12 @@ The code is intentionally small — every screen is one server component + one c
 
 ## Creators sign-up tracker (`/creators`)
 
-Paste an Instagram reel, YouTube video/short or TikTok link. The app resolves the
-thumbnail, title, creator handle and follower count where the platform allows it
-(YouTube and TikTok have public oEmbed; Instagram hides everything behind a login, so
-you paste/upload a thumbnail and type the handle). Each video gets a tracked link:
+Paste an Instagram reel, YouTube video/short or TikTok link and the card appears. The app
+resolves the thumbnail, title, creator handle and follower count where the platform allows
+it (YouTube and TikTok have public oEmbed). Instagram hides everything behind a login and
+blocks automated access, so for reels you add the thumbnail and handle on the card; the
+sanctioned way to automate that later is the Instagram Graph API via a Meta developer app.
+Each video gets a tracked link:
 
 ```
 https://www.riffle.studio/?utm_source=<platform>&utm_medium=creator&utm_campaign=<handle>&utm_content=video-<n>

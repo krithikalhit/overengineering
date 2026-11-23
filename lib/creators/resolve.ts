@@ -141,109 +141,10 @@ export async function fetchTiktokFollowers(handle: string): Promise<number | nul
   }
 }
 
-// ---------- Instagram (needs the user's own session) ----------
-// Instagram serves nothing useful to anonymous requests. With INSTAGRAM_SESSION_ID (the
-// `sessionid` cookie of a logged-in browser) set, the same JSON the web app itself loads
-// is available: media details by shortcode and a profile's follower count.
-
-const IG_APP_ID = "936619743392459"; // the web app's public app id, sent by instagram.com itself
-
-function igHeaders(): Record<string, string> | null {
-  const sid = process.env.INSTAGRAM_SESSION_ID?.trim();
-  if (!sid) return null;
-  return {
-    cookie: `sessionid=${sid}`,
-    "x-ig-app-id": IG_APP_ID,
-    "x-requested-with": "XMLHttpRequest",
-    referer: "https://www.instagram.com/",
-    accept: "*/*",
-  };
-}
-
-export function instagramConnected(): boolean {
-  return igHeaders() !== null;
-}
-
-type IgMedia = {
-  title: string;
-  thumbnail_url: string;
-  username: string;
-  full_name: string;
-  followers: number | null;
-  video: boolean;
-};
-
-async function igJson(url: string): Promise<unknown | null> {
-  const h = igHeaders();
-  if (!h) return null;
-  try {
-    const res = await get(url, 8000, h);
-    const text = await res.text();
-    if (!res.ok || !text.startsWith("{")) return null; // HTML = login page / expired session
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-export async function fetchInstagramMedia(code: string): Promise<IgMedia | null> {
-  const json = (await igJson(`https://www.instagram.com/p/${encodeURIComponent(code)}/?__a=1&__d=dis`)) as
-    | {
-        items?: Array<{
-          caption?: { text?: string } | null;
-          user?: { username?: string; full_name?: string; follower_count?: number };
-          image_versions2?: { candidates?: Array<{ url?: string; width?: number }> };
-          media_type?: number;
-          carousel_media?: Array<{ image_versions2?: { candidates?: Array<{ url?: string; width?: number }> } }>;
-        }>;
-        graphql?: {
-          shortcode_media?: {
-            display_url?: string;
-            is_video?: boolean;
-            owner?: { username?: string; full_name?: string; edge_followed_by?: { count?: number } };
-            edge_media_to_caption?: { edges?: Array<{ node?: { text?: string } }> };
-          };
-        };
-      }
-    | null;
-  if (!json) return null;
-  const item = json.items?.[0];
-  if (item) {
-    const cands = item.image_versions2?.candidates ?? item.carousel_media?.[0]?.image_versions2?.candidates ?? [];
-    const best = cands.slice().sort((a, b) => (b.width ?? 0) - (a.width ?? 0))[0];
-    return {
-      title: (item.caption?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 140),
-      thumbnail_url: best?.url ?? "",
-      username: item.user?.username ?? "",
-      full_name: item.user?.full_name ?? "",
-      followers: item.user?.follower_count ?? null,
-      video: item.media_type === 2,
-    };
-  }
-  const m = json.graphql?.shortcode_media;
-  if (m) {
-    return {
-      title: (m.edge_media_to_caption?.edges?.[0]?.node?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 140),
-      thumbnail_url: m.display_url ?? "",
-      username: m.owner?.username ?? "",
-      full_name: m.owner?.full_name ?? "",
-      followers: m.owner?.edge_followed_by?.count ?? null,
-      video: !!m.is_video,
-    };
-  }
-  return null;
-}
-
 export async function fetchInstagramFollowers(handle: string): Promise<number | null> {
-  if (instagramConnected()) {
-    const json = (await igJson(
-      `https://www.instagram.com/api/v1/users/web_profile_info/?username=${encodeURIComponent(handle)}`,
-    )) as { data?: { user?: { edge_followed_by?: { count?: number } } } } | null;
-    const n = json?.data?.user?.edge_followed_by?.count;
-    if (typeof n === "number") return n;
-  }
-  // Anonymous fallback: the public profile page's og:description sometimes reads
-  // "1,234 Followers, 56 Following, 78 Posts" — usually it's a login wall instead.
+  // Instagram serves a login wall to anything that isn't a logged-in browser, so this
+  // almost always returns null and the follower count is typed in by hand. The sanctioned
+  // route is the Instagram Graph API (business_discovery) via a Meta developer app.
   try {
     const res = await get(`https://www.instagram.com/${encodeURIComponent(handle)}/`, 7000);
     const html = await res.text();
@@ -333,34 +234,24 @@ export async function resolveVideo(raw: string, opts: { followers?: boolean } = 
       out.warnings.push("TikTok didn't return details for this link. Fill the creator and thumbnail in by hand.");
     }
   } else if (parsed.platform === "instagram") {
-    const media = await fetchInstagramMedia(parsed.videoId);
-    if (media) {
-      out.title = media.title;
-      out.thumbnail_url = media.thumbnail_url;
-      if (media.username) out.creator_handle = media.username;
-      out.creator_name = media.full_name;
-      if (media.followers != null) out.followers = media.followers;
-    } else if (instagramConnected()) {
-      out.warnings.push("Instagram didn't answer with the connected session — it may have expired. Refresh INSTAGRAM_SESSION_ID.");
-    } else {
-      // No session: try the public embed page, which usually answers with a login wall.
-      try {
-        const res = await get(`${parsed.canonical}embed/captioned/`, 6000);
-        const html = await res.text();
-        const img = html.match(/class="EmbeddedMediaImage"[^>]*src="([^"]+)"/)?.[1];
-        const user = html.match(/class="UsernameText"[^>]*>([^<]+)</)?.[1];
-        if (img) out.thumbnail_url = img.replace(/&amp;/g, "&");
-        if (user && !out.creator_handle) out.creator_handle = user.trim().replace(/^@/, "");
-      } catch {
-        /* fall through */
-      }
-      if (!out.thumbnail_url) out.warnings.push("Instagram hides reel details behind a login. Set INSTAGRAM_SESSION_ID to auto-fill, or add the thumbnail and handle by hand.");
+    // Instagram hides reels behind a login wall. Try the public embed page (rarely works),
+    // otherwise the user adds the thumbnail and handle on the card.
+    try {
+      const res = await get(`${parsed.canonical}embed/captioned/`, 6000);
+      const html = await res.text();
+      const img = html.match(/class="EmbeddedMediaImage"[^>]*src="([^"]+)"/)?.[1];
+      const user = html.match(/class="UsernameText"[^>]*>([^<]+)</)?.[1];
+      if (img) out.thumbnail_url = img.replace(/&amp;/g, "&");
+      if (user && !out.creator_handle) out.creator_handle = user.trim().replace(/^@/, "");
+    } catch {
+      /* fall through */
     }
+    if (!out.thumbnail_url) out.warnings.push("Instagram hides reel details behind a login. Add the thumbnail and handle on the card.");
     if (out.creator_handle) out.creator_url = profileUrl("instagram", out.creator_handle);
   }
 
   out.thumbnail_proxyable = isProxyableThumb(out.thumbnail_url);
-  if (opts.followers !== false && out.followers == null && (out.creator_handle || out.creator_url)) {
+  if (opts.followers !== false && (out.creator_handle || out.creator_url)) {
     out.followers = await fetchFollowers(out.platform, out.creator_handle, out.creator_url);
   }
   return out;

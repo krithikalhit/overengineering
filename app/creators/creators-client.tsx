@@ -173,7 +173,7 @@ function looksLikeVideoLink(s: string): boolean {
 
 // ---------- page ----------
 
-export function CreatorsClient(props: { initial: CreatorVideo[]; posthogReady: boolean; instagramReady: boolean }) {
+export function CreatorsClient(props: { initial: CreatorVideo[]; posthogReady: boolean }) {
   return (
     <ToastProvider>
       <Feed {...props} />
@@ -181,7 +181,7 @@ export function CreatorsClient(props: { initial: CreatorVideo[]; posthogReady: b
   );
 }
 
-function Feed({ initial, posthogReady, instagramReady }: { initial: CreatorVideo[]; posthogReady: boolean; instagramReady: boolean }) {
+function Feed({ initial, posthogReady }: { initial: CreatorVideo[]; posthogReady: boolean }) {
   const toast = useToast();
   const [videos, setVideos] = React.useState<CreatorVideo[]>(initial);
   const [filter, setFilter] = React.useState<Filter>("all");
@@ -261,7 +261,7 @@ function Feed({ initial, posthogReady, instagramReady }: { initial: CreatorVideo
     const stale = initial
       .filter((v) => v.creator_handle || v.creator_url)
       .filter((v) => !v.followers || (v.followers_checked_at && Date.now() - Date.parse(v.followers_checked_at) > STALE_FOLLOWERS_MS))
-      .filter((v) => v.platform !== "instagram" || instagramReady)
+      .filter((v) => v.platform !== "instagram")
       .slice(0, 3);
     for (const v of stale) {
       api<{ followers: number | null; checked_at: string }>(
@@ -377,7 +377,7 @@ function Feed({ initial, posthogReady, instagramReady }: { initial: CreatorVideo
     { id: "youtube", label: "YouTube" },
     { id: "tiktok", label: "TikTok" },
   ];
-  const needsSetup = !posthogReady || !instagramReady;
+  const needsSetup = !posthogReady;
 
   return (
     <main className="min-h-screen bg-white pb-24">
@@ -440,7 +440,7 @@ function Feed({ initial, posthogReady, instagramReady }: { initial: CreatorVideo
               ) : null}
               {needsSetup && (
                 <button onClick={() => setShowSetup((s) => !s)} className="inline-flex items-center gap-1 rounded-full bg-amber-50 text-amber-900 px-2.5 h-6 font-medium">
-                  {[!posthogReady && "PostHog", !instagramReady && "Instagram"].filter(Boolean).join(" + ")} not connected
+                  PostHog not connected
                   <ChevronDown className={cn("h-3 w-3 transition", showSetup && "rotate-180")} />
                 </button>
               )}
@@ -450,7 +450,7 @@ function Feed({ initial, posthogReady, instagramReady }: { initial: CreatorVideo
       </div>
 
       <div className="mx-auto max-w-[1400px] px-4 sm:px-6">
-        {needsSetup && showSetup && <SetupHints posthogReady={posthogReady} instagramReady={instagramReady} />}
+        {needsSetup && showSetup && <SetupHints />}
 
         {/* Totals */}
         <div className="mt-2 mb-6 grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -519,30 +519,15 @@ function Feed({ initial, posthogReady, instagramReady }: { initial: CreatorVideo
   );
 }
 
-function SetupHints({ posthogReady, instagramReady }: { posthogReady: boolean; instagramReady: boolean }) {
+function SetupHints() {
   return (
-    <div className="mt-2 grid sm:grid-cols-2 gap-3 text-sm">
-      {!posthogReady && (
-        <div className="rounded-2xl border p-4">
-          <div className="font-semibold">Connect PostHog (sign-ups + clicks)</div>
-          <ol className="mt-2 list-decimal pl-4 space-y-1 text-ink-600">
-            <li>PostHog → your avatar → <b>Personal API keys</b> → create one with the <code>query:read</code> scope.</li>
-            <li>Add <code>POSTHOG_PERSONAL_API_KEY</code> and <code>POSTHOG_PROJECT_ID</code> (the number in the PostHog URL) to Vercel env vars and <code>.env.local</code>.</li>
-            <li>Redeploy. Cards fill in with sign-ups automatically.</li>
-          </ol>
-        </div>
-      )}
-      {!instagramReady && (
-        <div className="rounded-2xl border p-4">
-          <div className="font-semibold">Connect Instagram (auto-fill reels)</div>
-          <ol className="mt-2 list-decimal pl-4 space-y-1 text-ink-600">
-            <li>Log in to instagram.com in your browser.</li>
-            <li>DevTools → Application → Cookies → instagram.com → copy the <code>sessionid</code> value.</li>
-            <li>Add it as <code>INSTAGRAM_SESSION_ID</code> in Vercel env vars and <code>.env.local</code>, then redeploy.</li>
-          </ol>
-          <p className="mt-2 text-xs text-ink-500">Reels then arrive with caption, thumbnail, handle and follower count. Logging out of Instagram invalidates it.</p>
-        </div>
-      )}
+    <div className="mt-2 rounded-2xl border p-4 text-sm max-w-xl">
+      <div className="font-semibold">Connect PostHog (sign-ups + clicks)</div>
+      <ol className="mt-2 list-decimal pl-4 space-y-1 text-ink-600">
+        <li>PostHog → your avatar → <b>Personal API keys</b> → create one with the <code>query:read</code> scope.</li>
+        <li>Add <code>POSTHOG_PERSONAL_API_KEY</code> and <code>POSTHOG_PROJECT_ID</code> (the number in the PostHog URL) to Vercel env vars and <code>.env.local</code>.</li>
+        <li>Redeploy. Cards fill in with sign-ups automatically.</li>
+      </ol>
     </div>
   );
 }

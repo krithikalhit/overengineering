@@ -1,7 +1,6 @@
 import { TopNav } from "@/components/shared/nav";
 import { ensureVideosSheet, listVideos } from "@/lib/creators/sheets";
 import { posthogConfigured } from "@/lib/creators/posthog";
-import { instagramConnected } from "@/lib/creators/resolve";
 import { CreatorVideo } from "@/lib/creators/types";
 import { CreatorsClient } from "./creators-client";
 
@@ -31,7 +30,7 @@ export default async function CreatorsPage() {
           <p className="mt-2 text-sm text-ink-500">{loadError}</p>
         </main>
       ) : (
-        <CreatorsClient initial={videos} posthogReady={posthogConfigured()} instagramReady={instagramConnected()} />
+        <CreatorsClient initial={videos} posthogReady={posthogConfigured()} />
       )}
     </>
   );

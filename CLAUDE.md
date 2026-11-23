@@ -84,3 +84,27 @@ Verified against the file on 2026-09-16 by evaluating the model section in node.
   going $1,728 → $4,816.
 - Consultants are seeded one-time because the allocation plan sums them flat. If Tess's
   "90 day lock-in" is a monthly retainer, that's $22,500 not $7,500.
+
+## Creators tracker — `app/creators` (served at `/creators`)
+
+Pinterest-style feed of creator-program videos. One row per posted video in a
+`creator_videos` tab of the CRM sheet (`lib/creators/sheets.ts`), gated by the admin cookie.
+
+- Attribution is by UTM: `utm_campaign` = creator handle slug, `utm_content` = `video-<n>`.
+  `lib/creators/posthog.ts` runs two HogQL queries against PostHog with a personal API key:
+  event-level `utm_*` on `$pageview` + `user_signed_up`, plus `user_signed_up` events that
+  only carry person-level `$initial_utm_*` (so nothing double counts). Signups are
+  `uniq(person_id)`. Matching is case-insensitive (`statsForVideo` in `lib/creators/types.ts`).
+- `user_signed_up` fires server-side for email signups with no `$host`; never add a host
+  filter to the signup query or ~22% of signups vanish (per the event's PostHog description).
+- `lib/creators/resolve.ts` is best-effort: YouTube/TikTok oEmbed, subscriber/follower
+  counts from the public profile HTML, Instagram via the `/embed/captioned/` page (usually a
+  login wall → manual fields). Don't try to get past Instagram's login wall with a session
+  cookie or by imitating its web client — tried 2026-11-23, it answers "Page Not Found" and
+  it's against their terms. The sanctioned route is the Graph API (business_discovery +
+  instagram_oembed) with a Meta developer app. Follower counts are editable by hand; a blank
+  `followers_checked_at` means hand-entered.
+- Thumbnails: YouTube URLs are kept as-is; anything else is proxied through
+  `/api/creators/img` (allowlisted CDN hosts only) and shrunk client-side to a ≤45k-char
+  JPEG data URL so it fits one sheet cell and survives CDN URL expiry.
+- Owner tags are fixed to Ivan / Krithika (`OWNERS` in `lib/creators/types.ts`).

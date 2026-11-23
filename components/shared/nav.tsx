@@ -4,16 +4,15 @@ export function TopNav({
   active,
   showAdmin = false,
 }: {
-  active: "board" | "admin" | "meetings" | "creators";
+  active: "board" | "admin" | "meetings";
   showAdmin?: boolean;
 }) {
-  const items: { id: "board" | "admin" | "meetings" | "creators"; label: string; href: string }[] = [
+  const items: { id: "board" | "admin" | "meetings"; label: string; href: string }[] = [
     { id: "board", label: "Board", href: "/board" },
   ];
   if (showAdmin) {
     items.push({ id: "admin", label: "Admin", href: "/admin" });
     items.push({ id: "meetings", label: "Meetings", href: "/meetings" });
-    items.push({ id: "creators", label: "Creators", href: "/creators" });
   }
   return (
     <header className="border-b">

@@ -5,6 +5,7 @@ Founder OS for fundraising. Three pages, one Google Sheet, one Notion calendar.
 - `/board` — public investor intro board (shareable link)
 - `/admin` — private CRM (table + kanban, password-gated)
 - `/meetings` — Notion calendar agenda (password-gated)
+- `/creators` — creator-program sign-up tracker: a Pinterest-style feed of creator videos with price, followers, owner tag, and PostHog-attributed link clicks + sign-ups (password-gated)
 
 Stack: Next.js 15 (App Router), Tailwind, Google Sheets API, Notion API. Deploy to Vercel.
 
@@ -239,3 +240,28 @@ Easy follow-ups (deliberately not built):
 - Realtime: poll `GET /api/investors` every 30s in `admin-client.tsx` and merge
 
 The code is intentionally small — every screen is one server component + one client component. Add features by extending types in `lib/types.ts` and the corresponding sheet headers; `bootstrap()` will reconcile.
+
+---
+
+## Creators sign-up tracker (`/creators`)
+
+Paste an Instagram reel, YouTube video/short or TikTok link. The app resolves the
+thumbnail, title, creator handle and follower count where the platform allows it
+(YouTube and TikTok have public oEmbed; Instagram hides everything behind a login, so
+you paste/upload a thumbnail and type the handle). Each video gets a tracked link:
+
+```
+https://www.riffle.studio/?utm_source=<platform>&utm_medium=creator&utm_campaign=<handle>&utm_content=video-<n>
+```
+
+Hand that link to the creator. PostHog then attributes `$pageview` (link clicks) and
+`user_signed_up` (sign-ups) to the video by `utm_campaign` + `utm_content`. Leave
+`utm_content` blank on a video to pool every link for that creator. If you already have a
+tracked link, tick "I have my own link" and paste it; the UTMs are read from it.
+
+Rows live in a `creator_videos` tab of the CRM sheet (created on first visit). Thumbnails
+from expiring CDNs (TikTok, Instagram) are stored as small JPEG data URLs in the row.
+
+PostHog needs two env vars: `POSTHOG_PERSONAL_API_KEY` (a personal API key with
+`query:read`) and `POSTHOG_PROJECT_ID`. Without them the feed still works, it just shows
+"PostHog not connected" and dashes for sign-ups.
